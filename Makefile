@@ -5,14 +5,18 @@
 ## Keywords: 
 ## X-URL: 
 
-TARGET=bin/sshproxy ssh.db
+TARGET=bin/sshproxy
 
 build: $(TARGET)
 
 clean:
 	rm -f $(TARGET)
 
-run: build
+cleandb:
+	rm -f ssh.db
+	rm -rf logs
+
+run: build ssh.db
 	bin/sshproxy -config config.json
 
 bin/sshproxy:
@@ -21,6 +25,7 @@ bin/sshproxy:
 	strip $@
 
 ssh.db:
+	mkdir -p logs
 	sqlite3 $@ < db/ssh.sql
 	python db/pubkey.py $@ shell < db/shell.pub
 	python db/hosts.py $@ localhost localhost

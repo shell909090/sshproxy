@@ -16,7 +16,7 @@ def main():
     host = args[1]
     port = int(optdict.get('-p') or '22')
     hostname = args[2]
-    hostkeys = subprocess.check_output(["ssh-keyscan", args[2]])
+    hostkeys = subprocess.check_output(["ssh-keyscan", "-t", "rsa,dsa,ecdsa", args[2]])
 
     conn = sqlite3.connect(args[0])
     c = conn.cursor()
