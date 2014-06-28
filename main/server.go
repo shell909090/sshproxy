@@ -11,11 +11,9 @@ import (
 
 type Server struct {
 	Config
-	cis                  map[net.Addr]*ConnInfo
-	mu                   sync.Mutex
-	db                   *sql.DB
-	stmtInsertRecord     *sql.Stmt
-	stmtSelectUserPubKey *sql.Stmt
+	cis map[net.Addr]*ConnInfo
+	mu  sync.Mutex
+	db  *sql.DB
 }
 
 func CreateServer(cfg Config) (srv *Server, err error) {
@@ -29,69 +27,7 @@ func CreateServer(cfg Config) (srv *Server, err error) {
 		panic(err.Error())
 	}
 
-	srv.stmtInsertRecord, err = srv.db.Prepare("INSERT INTO records(realname, username, host) values(?,?,?)")
-	if err != nil {
-		panic(err.Error())
-		return
-	}
-
-	srv.stmtSelectUserPubKey, err = srv.db.Prepare("SELECT realname FROM user_pubkey WHERE pubkey=?")
-	if err != nil {
-		panic(err.Error())
-		return
-	}
-
 	return
-}
-
-func (srv *Server) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
-	for req := range reqs {
-		log.Debug("new req: %s(reply: %t).", req.Type, req.WantReply)
-
-		b, err := ch.SendRequest(req.Type, req.WantReply, req.Payload)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-		log.Debug("send req ok: %s %t", req.Type, b)
-
-		err = req.Reply(b, nil)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-		log.Debug("reply req ok: %s", req.Type)
-	}
-}
-
-func (srv *Server) serveChan(client *ssh.Client, newChannel ssh.NewChannel, ci *ConnInfo) {
-	chout, outreqs, err := client.OpenChannel(
-		newChannel.ChannelType(), newChannel.ExtraData())
-	if err != nil {
-		newChannel.Reject(ssh.UnknownChannelType, err.Error())
-		log.Error("reject channel: %s", err.Error())
-		return
-	}
-	log.Debug("open channel ok.")
-
-	chin, inreqs, err := newChannel.Accept()
-	if err != nil {
-		log.Error("could not accept channel.")
-		return
-	}
-	log.Debug("accept channel ok.")
-
-	wl, err := srv.CreateLogger(chin, ci)
-	if err != nil {
-		log.Error("can't create logger.")
-		return
-	}
-
-	go srv.serveReqs(chin, outreqs)
-	go srv.serveReqs(chout, inreqs)
-
-	go CopyChan(chout, chin)
-	go CopyChan(wl, chout)
 }
 
 func (srv *Server) getConnInfo(remote net.Addr) (ci *ConnInfo, err error) {
@@ -111,7 +47,7 @@ func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
 	// load private key from user and host
 	var privateStr string
 	err = srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
-		ci.username, ci.host).Scan(&privateStr)
+		ci.Username, ci.Host).Scan(&privateStr)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -123,7 +59,7 @@ func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
 	}
 
 	config := &ssh.ClientConfig{
-		User: ci.username,
+		User: ci.Username,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(private),
 		},
@@ -131,7 +67,7 @@ func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
 	}
 
 	// and try connect it as last step
-	hostname := fmt.Sprintf("%s:%d", ci.hostname, ci.port)
+	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
 	client, err = ssh.Dial("tcp", hostname, config)
 	if err != nil {
 		log.Error("Failed to dial: %s", err.Error())
@@ -161,7 +97,7 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 	log.Debug("handshake ok")
 	for newChannel := range chans {
 		log.Debug("new channel: %s", newChannel.ChannelType())
-		srv.serveChan(client, newChannel, ci)
+		ci.serveChan(client, newChannel)
 	}
 
 	srv.closeConn(remote, ci)
@@ -176,7 +112,8 @@ func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
 }
 
 func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
-	err = srv.stmtSelectUserPubKey.QueryRow(string(key.Marshal())).Scan(&realname)
+	err = srv.db.QueryRow("SELECT realname FROM user_pubkey WHERE pubkey=?",
+		string(key.Marshal())).Scan(&realname)
 	switch err {
 	case sql.ErrNoRows:
 		return "", ErrIllegalPubkey
@@ -189,23 +126,6 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
 
 func CheckAccess(realname, username, host string, remote net.Addr) (err error) {
 	log.Info("user %s@%s will connect %s@%s.", realname, remote, username, host)
-	return
-}
-
-func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
-	ci = &ConnInfo{
-		realname: realname,
-		username: username,
-		host:     host,
-	}
-	err = srv.db.QueryRow("SELECT hostname, port, hostkeys FROM hosts WHERE host=?", host).Scan(
-		&ci.hostname, &ci.port, &ci.hostkeys)
-	if err != nil {
-		log.Error("%s", err.Error())
-		err = ErrHostKey
-		return
-	}
-
 	return
 }
 
@@ -240,7 +160,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 		return
 	}
 
-	ci, err := srv.createConnInfo(realname, username, host)
+	ci, err := srv.createConnInfo(srv.db, realname, username, host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
