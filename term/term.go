@@ -1,7 +1,11 @@
 package term
 
+import (
+	"io"
+)
+
 type Term struct {
-	termbuf    [][]rune
+	termbuf    [][]byte
 	x, y       int
 	rows, cols int
 }
@@ -18,9 +22,9 @@ func CreateTerm(cols, rows int) (t *Term) {
 }
 
 func (t *Term) Clean() {
-	t.termbuf = make([][]rune, t.rows)
+	t.termbuf = make([][]byte, t.rows)
 	for i, _ := range t.termbuf {
-		t.termbuf[i] = make([]rune, t.cols)
+		t.termbuf[i] = make([]byte, t.cols)
 	}
 }
 
@@ -36,14 +40,14 @@ func (t *Term) ScrollUp() {
 	log.Debug("scroll up")
 	t.y--
 	t.termbuf = t.termbuf[1:]
-	t.termbuf = append(t.termbuf, make([]rune, t.cols))
+	t.termbuf = append(t.termbuf, make([]byte, t.cols))
 }
 
 func (t *Term) ScrollDown() {
 	log.Debug("scroll down")
 	t.y++
 	copy(t.termbuf[1:], t.termbuf[:len(t.termbuf)-1])
-	t.termbuf[0] = make([]rune, t.cols)
+	t.termbuf[0] = make([]byte, t.cols)
 }
 
 func (t *Term) CursorRound() {

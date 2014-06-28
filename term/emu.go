@@ -2,9 +2,47 @@ package term
 
 import (
 	"github.com/op/go-logging"
+	"io"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var log = logging.MustGetLogger("")
+
+func ReadUntilByte(ch chan byte, c byte) (buf []byte, err error) {
+	for {
+		b, ok := <-ch
+		if !ok {
+			return nil, io.EOF
+		}
+		buf = append(buf, b)
+		if b == c {
+			return buf, nil
+		}
+	}
+	return
+}
+
+func ReadUntil(ch chan byte, f func(c byte) bool) (buf []byte, err error) {
+	for {
+		b, ok := <-ch
+		if !ok {
+			return nil, io.EOF
+		}
+		buf = append(buf, b)
+		if f(b) {
+			return buf, nil
+		}
+	}
+	return
+}
+
+func MemsetRune(buf []byte, c byte) {
+	for i, _ := range buf {
+		buf[i] = c
+	}
+}
 
 type Emu struct {
 	t        *Term
@@ -29,9 +67,10 @@ func CreateEmu(chcmd chan string, cols, rows int) (e *Emu) {
 	return e
 }
 
-func (e *Emu) Close() {
+func (e *Emu) Close() error {
 	close(e.ch_out)
 	<-e.ch_done
+	return nil
 }
 
 func (e *Emu) Write(p []byte) (n int, err error) {
@@ -181,7 +220,7 @@ func (e *Emu) proc_out(c byte) (err error) {
 	return
 }
 
-func ParseOneParamInt(cmd []rune, dft int) (n int) {
+func ParseOneParamInt(cmd []byte, dft int) (n int) {
 	if len(cmd) <= 1 {
 		return dft
 	}
@@ -192,7 +231,7 @@ func ParseOneParamInt(cmd []rune, dft int) (n int) {
 	return
 }
 
-func ParseParamsInt(cmd []rune, dft int) (ns []int) {
+func ParseParamsInt(cmd []byte, dft int) (ns []int) {
 	var n int
 	var err error
 	if len(cmd) <= 1 {
@@ -214,7 +253,7 @@ func ParseParamsInt(cmd []rune, dft int) (ns []int) {
 }
 
 func (e *Emu) do_CSI() (err error) {
-	cmd, err := ReadUntil(e.ch_out, func(c rune) bool {
+	cmd, err := ReadUntil(e.ch_out, func(c byte) bool {
 		return !(c >= '0' && c <= '9') && c != ';' && c != '?'
 	})
 	if err != nil {
@@ -304,7 +343,7 @@ func (e *Emu) do_CSI() (err error) {
 	case 0x18, 0x1A: // CAN (0x18, ^X) and SUB (0x1A, ^Z) interrupt escape sequences;
 		break
 	default:
-		sutils.Warning("CSI:", string(cmd))
+		log.Warning("CSI: %s", string(cmd))
 	}
 	return
 }
@@ -318,7 +357,7 @@ func (e *Emu) do_OSC() (err error) {
 	}
 	title, _ := ReadUntilByte(e.ch_out, 0x07)
 	e.title = strings.TrimRight(string(title), "\x07")
-	sutils.Info("title:", e.title)
+	log.Info("title: %s", e.title)
 	return
 }
 

@@ -4,6 +4,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"strings"
 	"sync"
@@ -78,8 +79,6 @@ func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
 
 func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
 	defer conn.Close()
-	defer srv.closeConn(remote, ci)
-	go ssh.DiscardRequests(reqs)
 
 	remote := conn.RemoteAddr()
 	ci, err := srv.getConnInfo(remote)
@@ -87,6 +86,9 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 		log.Error("%s", err.Error())
 		return
 	}
+	defer srv.closeConn(remote, ci)
+
+	go ssh.DiscardRequests(reqs)
 
 	client, err := srv.clientBuilder(ci)
 	if err != nil {
@@ -101,7 +103,7 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 		ci.serveChan(client, newChannel)
 	}
 
-	ci.Final()
+	ci.Final(srv)
 	log.Info("Connect closed.")
 }
 

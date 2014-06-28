@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/shell909090/sshproxy/term"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 )
@@ -31,7 +30,7 @@ type ABWriteCloser struct {
 	b []io.WriteCloser
 }
 
-func CreateChanWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCloser) {
+func CreateABWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCloser) {
 	abc = &ABWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
 	for _, b := range bs {
 		abc.b = append(abc.b, b.(io.WriteCloser))
@@ -46,9 +45,9 @@ func (abc *ABWriteCloser) Write(p []byte) (n int, err error) {
 	return abc.a.Write(p)
 }
 
-func (cwc *ChanWriteCloser) Close() (err error) {
+func (abc *ABWriteCloser) Close() (err error) {
 	for _, b := range abc.b {
-		defer b.Close(p)
+		defer b.Close()
 	}
 	return abc.a.Close()
 }
@@ -118,8 +117,8 @@ func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (
 	return
 }
 
-func (ci *ConnInfo) Final() {
-	res, err := srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?", ci.RecordId)
+func (ci *ConnInfo) Final(srv *Server) {
+	_, err := srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?", ci.RecordId)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -194,5 +193,5 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
 	go ci.serveReqs(chout, inreqs)
 
 	go CopyChan(chout, chin)
-	go CopyChan(ABWriteCloser(chin, ci.raw, ci.e), chout)
+	go CopyChan(CreateABWriteCloser(chin, ci.raw, ci.e), chout)
 }
