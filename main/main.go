@@ -28,10 +28,6 @@ type Config struct {
 	Listen             string
 	DBFile             string
 	LogDir             string
-
-	// PublicKeyDir string
-	// HostKeyDir   string
-	// KeyDir       string
 }
 
 func LoadConfig() (cfg Config, err error) {
@@ -93,10 +89,10 @@ func main() {
 		return
 	}
 
-	srv, err := CreateServer(cfg)
+	srv, err := CreateServer(cfg.DBFile, cfg.LogDir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	srv.MainLoop()
+	srv.MainLoop(cfg.HostPrivateKeyFile, cfg.Listen)
 }

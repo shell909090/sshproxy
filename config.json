@@ -1,6 +1,6 @@
 {
     "Logfile": "",
-    "Loglevel": "INFO",
+    "Loglevel": "DEBUG",
 
     "HostPrivateKeyFile": "ssh_host_rsa_key",
     "Listen": "0.0.0.0:2022",

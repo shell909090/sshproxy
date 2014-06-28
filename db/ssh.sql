@@ -37,6 +37,14 @@ CREATE TABLE records (
        endtime TEXT
 );
 
+CREATE TABLE record_files (
+       recordid INTEGER REFERENCES records(id),
+       'type' TEXT,
+       filename TEXT,
+       'size' INTEGER,
+       remotedir TEXT
+);
+
 CREATE TABLE auditlog (
        id INTEGER PRIMARY KEY,
        'time' TEXT DEFAULT CURRENT_TIMESTAMP,

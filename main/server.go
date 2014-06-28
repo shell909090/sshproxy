@@ -11,19 +11,19 @@ import (
 )
 
 type Server struct {
-	Config
-	cis map[net.Addr]*ConnInfo
-	mu  sync.Mutex
-	db  *sql.DB
+	LogDir string
+	cis    map[net.Addr]*ConnInfo
+	mu     sync.Mutex
+	db     *sql.DB
 }
 
-func CreateServer(cfg Config) (srv *Server, err error) {
+func CreateServer(dbfile, logdir string) (srv *Server, err error) {
 	srv = &Server{
-		Config: cfg,
+		LogDir: logdir,
 		cis:    make(map[net.Addr]*ConnInfo, 0),
 	}
 
-	srv.db, err = sql.Open("sqlite3", srv.DBFile)
+	srv.db, err = sql.Open("sqlite3", dbfile)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -96,14 +96,13 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 		return
 	}
 	defer client.Close()
+	defer ci.Close()
 
 	log.Debug("handshake ok")
 	for newChannel := range chans {
-		log.Debug("new channel: %s", newChannel.ChannelType())
 		ci.serveChan(client, newChannel)
 	}
 
-	ci.Final(srv)
 	log.Info("Connect closed.")
 }
 
@@ -163,7 +162,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 		return
 	}
 
-	ci, err := srv.createConnInfo(srv.db, realname, username, host)
+	ci, err := srv.createConnInfo(realname, username, host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -192,18 +191,18 @@ func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
 	return
 }
 
-func (srv *Server) MainLoop() {
+func (srv *Server) MainLoop(HostPrivateKeyFile, Listen string) {
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: srv.authUser,
 	}
 
-	private, err := LoadPrivateKey(srv.HostPrivateKeyFile)
+	private, err := LoadPrivateKey(HostPrivateKeyFile)
 	if err != nil {
 		return
 	}
 	config.AddHostKey(private)
 
-	listener, err := net.Listen("tcp", srv.Listen)
+	listener, err := net.Listen("tcp", Listen)
 	if err != nil {
 		log.Error("failed to listen for connection: %s", err.Error())
 		return

@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
-	"database/sql"
 	"fmt"
-	"github.com/shell909090/sshproxy/term"
+	// "github.com/shell909090/sshproxy/term"
+	"encoding/binary"
 	"io"
 	"net"
 	"os"
+	"strings"
 )
 
 func CopyChan(d io.WriteCloser, s io.ReadCloser) {
@@ -21,6 +22,16 @@ func CopyChan(d io.WriteCloser, s io.ReadCloser) {
 	case nil:
 	default:
 		log.Error("%s", err.Error())
+	}
+	return
+}
+
+func ReadPayload(payload []byte) (strs []string) {
+	for len(payload) >= 4 {
+		size := binary.BigEndian.Uint32(payload[:4])
+		s := string(payload[4 : 4+size])
+		strs = append(strs, s)
+		payload = payload[4+size:]
 	}
 	return
 }
@@ -39,6 +50,7 @@ func CreateABWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCl
 }
 
 func (abc *ABWriteCloser) Write(p []byte) (n int, err error) {
+	log.Debug("write out: %d.", len(p))
 	for _, b := range abc.b {
 		defer b.Write(p)
 	}
@@ -53,6 +65,7 @@ func (abc *ABWriteCloser) Close() (err error) {
 }
 
 type ConnInfo struct {
+	srv      *Server
 	Realname string
 	Username string
 	Host     string
@@ -61,22 +74,31 @@ type ConnInfo struct {
 	Hostkeys string
 	RecordId int64
 
+	Type      string
+	ch_ready  chan int
+	RemoteDir string
+
 	chin  ssh.Channel
 	chout ssh.Channel
 
-	raw io.WriteCloser
+	out io.WriteCloser
+	in  io.WriteCloser
 	cmd io.WriteCloser
-	e   *term.Emu
+	// e   *term.Emu
 }
 
-func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (ci *ConnInfo, err error) {
-	chcmd := make(chan string, 0)
+func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
+	// chcmd := make(chan string, 0)
 
 	ci = &ConnInfo{
+		srv:      srv,
 		Realname: realname,
 		Username: username,
 		Host:     host,
-		e:        term.CreateEmu(chcmd, 80, 25),
+
+		ch_ready: make(chan int, 0),
+
+		// e:        term.CreateEmu(chcmd, 80, 25),
 	}
 
 	err = srv.db.QueryRow("SELECT hostname, port, hostkeys FROM hosts WHERE host=?", host).Scan(
@@ -100,15 +122,15 @@ func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (
 		return
 	}
 
-	filepath := fmt.Sprintf("%s/%d.raw", srv.Config.LogDir, ci.RecordId)
-	ci.raw, err = os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	ci.out, err = os.OpenFile(fmt.Sprintf("%s/%d.out", srv.LogDir, ci.RecordId),
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 
-	filepath = fmt.Sprintf("%s/%d.cmd", srv.Config.LogDir, ci.RecordId)
-	ci.cmd, err = os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	ci.in, err = os.OpenFile(fmt.Sprintf("%s/%d.in", srv.LogDir, ci.RecordId),
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -117,8 +139,9 @@ func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (
 	return
 }
 
-func (ci *ConnInfo) Final(srv *Server) {
-	_, err := srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?", ci.RecordId)
+func (ci *ConnInfo) Close() (err error) {
+	_, err = ci.srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?",
+		ci.RecordId)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -150,27 +173,93 @@ func (ci *ConnInfo) checkHostKey(hostname string, remote net.Addr, key ssh.Publi
 	return ErrHostKey
 }
 
+func (ci *ConnInfo) on_file_transmit(filename string, size int) {
+	log.Info("transmit %s with name: %s, size: %d, remote dir: %s",
+		ci.Type, filename, size, ci.RemoteDir)
+
+	_, err := ci.srv.db.Exec("INSERT INTO record_files(recordid, type, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, ci.Type, filename, size, ci.RemoteDir)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+	return
+}
+
+func (ci *ConnInfo) on_req(req *ssh.Request) (err error) {
+	switch req.Type {
+	case "env":
+		envs := ReadPayload(req.Payload)
+		for _, env := range envs {
+			log.Debug("env: %s", env)
+		}
+	case "exec":
+		cmds := ReadPayload(req.Payload)
+		log.Debug("exec with cmd: %s.", cmds[0])
+		cmds = strings.Split(cmds[0], " ")
+		if cmds[0] == "scp" {
+			switch cmds[len(cmds)-2] {
+			case "-t":
+				ci.Type = "scpto"
+			case "-f":
+				ci.Type = "scpfrom"
+			}
+			ci.RemoteDir = cmds[len(cmds)-1]
+			log.Info("session in %s mode, remote dir: %s.",
+				ci.Type, ci.RemoteDir)
+			ci.ch_ready <- 1
+		}
+	case "shell":
+		ci.Type = "shell"
+		log.Info("session in shell mode")
+		ci.ch_ready <- 1
+	}
+	return nil
+}
+
 func (ci *ConnInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	for req := range reqs {
-		log.Debug("new req: %s(reply: %t).", req.Type, req.WantReply)
+		log.Debug("new req: %s(reply: %t, payload: %d).",
+			req.Type, req.WantReply, len(req.Payload))
+
+		err := ci.on_req(req)
+		if err != nil {
+			log.Error("%s", err.Error())
+			if req.WantReply {
+				err = req.Reply(false, nil)
+				if err != nil {
+					log.Error("%s", err.Error())
+					return
+				}
+			}
+			continue
+		}
 
 		b, err := ch.SendRequest(req.Type, req.WantReply, req.Payload)
 		if err != nil {
 			log.Error("%s", err.Error())
 			return
 		}
-		log.Debug("send req ok: %s %t", req.Type, b)
+		log.Debug("send req ok: %s(result: %t)", req.Type, b)
 
 		err = req.Reply(b, nil)
 		if err != nil {
 			log.Error("%s", err.Error())
 			return
 		}
-		log.Debug("reply req ok: %s", req.Type)
+		log.Debug("reply req ok: %s(result: %t)", req.Type, b)
 	}
 }
 
+// session
+// direct-tcpip
 func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
+	log.Debug("new channel: %s (len: %d)",
+		newChannel.ChannelType(), len(newChannel.ExtraData()))
+
+	if newChannel.ChannelType() != "session" {
+		return
+	}
+
 	chout, outreqs, err := client.OpenChannel(
 		newChannel.ChannelType(), newChannel.ExtraData())
 	if err != nil {
@@ -192,6 +281,18 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
 	go ci.serveReqs(chin, outreqs)
 	go ci.serveReqs(chout, inreqs)
 
-	go CopyChan(chout, chin)
-	go CopyChan(CreateABWriteCloser(chin, ci.raw, ci.e), chout)
+	<-ci.ch_ready
+
+	switch ci.Type {
+	case "shell":
+		go CopyChan(CreateABWriteCloser(chout, ci.in), chin)
+		go CopyChan(CreateABWriteCloser(chin, ci.out), chout)
+	case "scpto":
+		go CopyChan(CreateABWriteCloser(chout, CreateScpStream(ci)), chin)
+		go CopyChan(chin, chout)
+	case "scpfrom":
+		go CopyChan(chout, chin)
+		go CopyChan(CreateABWriteCloser(chin, CreateScpStream(ci)), chout)
+	}
+
 }
