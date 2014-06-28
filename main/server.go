@@ -78,6 +78,7 @@ func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
 
 func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
 	defer conn.Close()
+	defer srv.closeConn(remote, ci)
 	go ssh.DiscardRequests(reqs)
 
 	remote := conn.RemoteAddr()
@@ -100,7 +101,8 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 		ci.serveChan(client, newChannel)
 	}
 
-	srv.closeConn(remote, ci)
+	ci.Final()
+	log.Info("Connect closed.")
 }
 
 func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
@@ -108,7 +110,6 @@ func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
 	defer srv.mu.Unlock()
 
 	delete(srv.cis, remote)
-	log.Info("Connect closed.")
 }
 
 func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
@@ -170,6 +171,22 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	srv.cis[remote] = ci
+	return
+}
+
+func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
+	log.Info("load private key: %s", filename)
+
+	privateBytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Error("failed to load keyfile: %s", err.Error())
+		return
+	}
+	private, err = ssh.ParsePrivateKey(privateBytes)
+	if err != nil {
+		log.Error("failed to parse keyfile: %s", err.Error())
+		return
+	}
 	return
 }
 

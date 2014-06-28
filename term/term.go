@@ -66,15 +66,15 @@ func (t *Term) Dump(w io.Writer) {
 	}
 }
 
-func (t *Term) Write(p []rune) (n int, err error) {
+func (t *Term) Write(p []byte) (n int, err error) {
 	for _, c := range p {
-		t.WriteRune(c)
+		t.WriteOne(c)
 	}
 	return len(p), nil
 }
 
-func (t *Term) WriteRune(c rune) error {
-	t.termbuf[t.y][t.x] = c
+func (t *Term) WriteOne(b byte) error {
+	t.termbuf[t.y][t.x] = b
 	t.x += 1
 	if t.x >= t.cols {
 		t.x = 0
@@ -87,5 +87,5 @@ func (t *Term) WriteRune(c rune) error {
 }
 
 func (t *Term) WriteString(s string) (int, error) {
-	return t.Write([]rune(s))
+	return t.Write([]byte(s))
 }

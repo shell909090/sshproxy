@@ -5,47 +5,12 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"fmt"
+	"github.com/shell909090/sshproxy/term"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 )
-
-func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
-	log.Info("load private key: %s", filename)
-
-	privateBytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Error("failed to load keyfile: %s", err.Error())
-		return
-	}
-	private, err = ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-	return
-}
-
-// func LoadAuthorizedKey(filename string) (publices []ssh.PublicKey, err error) {
-// 	log.Info("load authorized key: %s", filename)
-// 	publicBytes, err := ioutil.ReadFile(filename)
-// 	if err != nil {
-// 		log.Error("failed to load pubkeyfile: %s", err.Error())
-// 		return
-// 	}
-// 	rest := publicBytes
-// 	for {
-// 		var public ssh.PublicKey
-// 		public, _, _, rest, err = ssh.ParseAuthorizedKey(rest)
-// 		if err != nil {
-// 			err = nil
-// 			break
-// 		}
-// 		publices = append(publices, public)
-// 	}
-// 	return
-// }
 
 func CopyChan(d io.WriteCloser, s io.ReadCloser) {
 	defer s.Close()
@@ -63,21 +28,29 @@ func CopyChan(d io.WriteCloser, s io.ReadCloser) {
 
 type ABWriteCloser struct {
 	a io.WriteCloser
-	b io.WriteCloser
+	b []io.WriteCloser
 }
 
-func CreateChanWriteCloser(a io.WriteCloser, b io.WriteCloser) (abc *ABWriteCloser) {
-	return &ABWriteCloser{a: a, b: b}
+func CreateChanWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCloser) {
+	abc = &ABWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
+	for _, b := range bs {
+		abc.b = append(abc.b, b.(io.WriteCloser))
+	}
+	return
 }
 
 func (abc *ABWriteCloser) Write(p []byte) (n int, err error) {
-	defer abc.a.Write(p)
-	return abc.b.Write(p)
+	for _, b := range abc.b {
+		defer b.Write(p)
+	}
+	return abc.a.Write(p)
 }
 
 func (cwc *ChanWriteCloser) Close() (err error) {
-	defer abc.a.Close()
-	return abc.b.Close()
+	for _, b := range abc.b {
+		defer b.Close(p)
+	}
+	return abc.a.Close()
 }
 
 type ConnInfo struct {
@@ -94,13 +67,17 @@ type ConnInfo struct {
 
 	raw io.WriteCloser
 	cmd io.WriteCloser
+	e   *term.Emu
 }
 
 func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (ci *ConnInfo, err error) {
+	chcmd := make(chan string, 0)
+
 	ci = &ConnInfo{
 		Realname: realname,
 		Username: username,
 		Host:     host,
+		e:        term.CreateEmu(chcmd, 80, 25),
 	}
 
 	err = srv.db.QueryRow("SELECT hostname, port, hostkeys FROM hosts WHERE host=?", host).Scan(
@@ -138,6 +115,15 @@ func (srv *Server) createConnInfo(db *sql.DB, realname, username, host string) (
 		return
 	}
 
+	return
+}
+
+func (ci *ConnInfo) Final() {
+	res, err := srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?", ci.RecordId)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
 	return
 }
 
@@ -208,5 +194,5 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
 	go ci.serveReqs(chout, inreqs)
 
 	go CopyChan(chout, chin)
-	go CopyChan(ABWriteCloser(ci.raw, chin), chout)
+	go CopyChan(ABWriteCloser(chin, ci.raw, ci.e), chout)
 }

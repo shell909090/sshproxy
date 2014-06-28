@@ -8,6 +8,7 @@ var log = logging.MustGetLogger("")
 
 type Emu struct {
 	t        *Term
+	ch_cmd   chan string
 	ch_out   chan byte
 	ch_done  chan int
 	ch_idle  <-chan time.Time
@@ -16,9 +17,10 @@ type Emu struct {
 	prompt   string
 }
 
-func CreateEmu(cols, rows int) (e *Emu) {
+func CreateEmu(chcmd chan string, cols, rows int) (e *Emu) {
 	e = &Emu{
 		t:        CreateTerm(cols, rows),
+		ch_cmd:   chcmd,
 		ch_out:   make(chan byte, 100),
 		ch_done:  make(chan int, 0),
 		mode_alt: 0,
@@ -66,7 +68,7 @@ QUIT:
 			}
 		}
 		if err != nil {
-			sutils.Err(err)
+			log.Error("%s", err.Error())
 		}
 	}
 }
@@ -174,7 +176,7 @@ func (e *Emu) proc_out(c byte) (err error) {
 		}
 	default:
 		// FIXME: insert mode?
-		e.t.WriteRune(c)
+		e.t.WriteOne(c)
 	}
 	return
 }
@@ -218,7 +220,7 @@ func (e *Emu) do_CSI() (err error) {
 	if err != nil {
 		return
 	}
-	// sutils.Debug("CSI:", string(cmd))
+	log.Debug("CSI: %s", string(cmd))
 	switch cmd[len(cmd)-1] {
 	case '@': // insert char
 		// TODO:

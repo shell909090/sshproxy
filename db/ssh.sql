@@ -39,6 +39,8 @@ CREATE TABLE records (
 
 CREATE TABLE auditlog (
        id INTEGER PRIMARY KEY,
+       'time' TEXT DEFAULT CURRENT_TIMESTAMP,
+       realname TEXT REFERENCES users(realname),
        'level' INTEGER,
        log TEXT
 );
