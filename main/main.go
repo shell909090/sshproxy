@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
@@ -13,13 +12,6 @@ import (
 )
 
 var log = logging.MustGetLogger("")
-
-var (
-	ErrIllegalUserName = errors.New("illegal username")
-	ErrIllegalPubkey   = errors.New("illegal pubkey")
-	ErrCINotFound      = errors.New("conn info not found")
-	ErrHostKey         = errors.New("host key not match")
-)
 
 type Config struct {
 	Logfile  string

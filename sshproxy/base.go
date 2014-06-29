@@ -1,20 +1,24 @@
 package sshproxy
 
 import (
-	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"encoding/binary"
-	"fmt"
+	"errors"
+	"github.com/op/go-logging"
 	"io"
-	"net"
-	"os"
-	"strings"
+	"io/ioutil"
 )
 
 var (
 	ErrScpStreamIllegal     = errors.New("scp stream illegal")
-	ErrChanTypeNotSupported = errorw.New("channel type not support")
+	ErrChanTypeNotSupported = errors.New("channel type not support")
+	ErrIllegalUserName      = errors.New("illegal username")
+	ErrIllegalPubkey        = errors.New("illegal pubkey")
+	ErrCINotFound           = errors.New("conn info not found")
+	ErrHostKey              = errors.New("host key not match")
 )
+
+var log = logging.MustGetLogger("")
 
 func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
 	log.Info("load private key: %s", filename)
@@ -53,9 +57,9 @@ func ReadPayloadString(payload []byte) (s string, rest []byte, err error) {
 	return
 }
 
-func ReadPayloadInt32(payload []byte) (i int32, rest []byte, err error) {
-	i := binary.BigEndian.Int32(payload[:4])
-	rest = payload[4+size:]
+func ReadPayloadUint32(payload []byte) (i uint32, rest []byte, err error) {
+	i = binary.BigEndian.Uint32(payload[:4])
+	rest = payload[4:]
 	return
 }
 

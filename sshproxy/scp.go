@@ -2,7 +2,6 @@ package sshproxy
 
 import (
 	"bytes"
-	"errors"
 	"strconv"
 	"strings"
 )

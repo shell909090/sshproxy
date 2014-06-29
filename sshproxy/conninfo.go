@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	// "github.com/shell909090/sshproxy/term"
-	"encoding/binary"
 	"io"
 	"net"
 	"os"
@@ -244,20 +243,20 @@ func (ci *ConnInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	}
 }
 
-func (ci *ConnInfo) getTcpInfo(d []byte) (srcip string, srcport int32, dstip string, dstport int32, err error) {
-	srcip, d, err := ReadPayloadString(d)
+func (ci *ConnInfo) getTcpInfo(d []byte) (srcip string, srcport uint32, dstip string, dstport uint32, err error) {
+	srcip, d, err = ReadPayloadString(d)
 	if err != nil {
 		return
 	}
-	srcport, d, err := ReadPayloadString(d)
+	srcport, d, err = ReadPayloadUint32(d)
 	if err != nil {
 		return
 	}
-	dstip, d, err := ReadPayloadString(d)
+	dstip, d, err = ReadPayloadString(d)
 	if err != nil {
 		return
 	}
-	dstport, d, err := ReadPayloadString(d)
+	dstport, d, err = ReadPayloadUint32(d)
 	if err != nil {
 		return
 	}
@@ -272,10 +271,10 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (er
 	case "session":
 	case "direct-tcpip":
 		ci.Type = "tcpip"
-		srcip, srcport, dstip, dstport, err := srv.getTcpInfo(newChannel.ExtraData())
+		srcip, srcport, dstip, dstport, err := ci.getTcpInfo(newChannel.ExtraData())
 		if err != nil {
 			log.Error("tcp info: %s", err.Error())
-			return
+			return err
 		}
 		log.Debug("mapping %s:%d %s:%d",
 			srcip, srcport, dstip, dstport)
@@ -325,5 +324,5 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (er
 		go CopyChan(chout, chin)
 		go CopyChan(CreateABWriteCloser(chin, CreateScpStream(ci)), chout)
 	}
-
+	return
 }

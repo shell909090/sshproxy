@@ -4,7 +4,6 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"strings"
 	"sync"
