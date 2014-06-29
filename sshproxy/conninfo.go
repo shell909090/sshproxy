@@ -1,4 +1,4 @@
-package main
+package sshproxy
 
 import (
 	"bytes"
@@ -11,58 +11,6 @@ import (
 	"os"
 	"strings"
 )
-
-func CopyChan(d io.WriteCloser, s io.ReadCloser) {
-	defer s.Close()
-	defer d.Close()
-	_, err := io.Copy(d, s)
-
-	switch err {
-	case io.EOF:
-	case nil:
-	default:
-		log.Error("%s", err.Error())
-	}
-	return
-}
-
-func ReadPayload(payload []byte) (strs []string) {
-	for len(payload) >= 4 {
-		size := binary.BigEndian.Uint32(payload[:4])
-		s := string(payload[4 : 4+size])
-		strs = append(strs, s)
-		payload = payload[4+size:]
-	}
-	return
-}
-
-type ABWriteCloser struct {
-	a io.WriteCloser
-	b []io.WriteCloser
-}
-
-func CreateABWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCloser) {
-	abc = &ABWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
-	for _, b := range bs {
-		abc.b = append(abc.b, b.(io.WriteCloser))
-	}
-	return
-}
-
-func (abc *ABWriteCloser) Write(p []byte) (n int, err error) {
-	log.Debug("write out: %d.", len(p))
-	for _, b := range abc.b {
-		defer b.Write(p)
-	}
-	return abc.a.Write(p)
-}
-
-func (abc *ABWriteCloser) Close() (err error) {
-	for _, b := range abc.b {
-		defer b.Close()
-	}
-	return abc.a.Close()
-}
 
 type ConnInfo struct {
 	srv      *Server
@@ -149,6 +97,40 @@ func (ci *ConnInfo) Close() (err error) {
 	return
 }
 
+func (ci *ConnInfo) clientBuilder() (client *ssh.Client, err error) {
+	// load private key from user and host
+	var privateStr string
+	err = ci.srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
+		ci.Username, ci.Host).Scan(&privateStr)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+
+	private, err := ssh.ParsePrivateKey([]byte(privateStr))
+	if err != nil {
+		log.Error("failed to parse keyfile: %s", err.Error())
+		return
+	}
+
+	config := &ssh.ClientConfig{
+		User: ci.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(private),
+		},
+		HostKeyCallback: ci.checkHostKey,
+	}
+
+	// and try connect it as last step
+	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
+	client, err = ssh.Dial("tcp", hostname, config)
+	if err != nil {
+		log.Error("Failed to dial: %s", err.Error())
+		return
+	}
+	return
+}
+
 func (ci *ConnInfo) checkHostKey(hostname string, remote net.Addr, key ssh.PublicKey) (err error) {
 	log.Debug("check hostkey: %s", hostname)
 
@@ -186,16 +168,28 @@ func (ci *ConnInfo) on_file_transmit(filename string, size int) {
 }
 
 func (ci *ConnInfo) on_req(req *ssh.Request) (err error) {
+	var strs []string
 	switch req.Type {
 	case "env":
-		envs := ReadPayload(req.Payload)
-		for _, env := range envs {
+		strs, err = ReadPayloads(req.Payload)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+
+		for _, env := range strs {
 			log.Debug("env: %s", env)
 		}
 	case "exec":
-		cmds := ReadPayload(req.Payload)
-		log.Debug("exec with cmd: %s.", cmds[0])
-		cmds = strings.Split(cmds[0], " ")
+		strs, err = ReadPayloads(req.Payload)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+
+		log.Debug("exec with cmd: %s.", strs[0])
+		cmds := strings.Split(strs[0], " ")
+
 		if cmds[0] == "scp" {
 			switch cmds[len(cmds)-2] {
 			case "-t":
@@ -250,19 +244,53 @@ func (ci *ConnInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	}
 }
 
-// session
-// direct-tcpip
-func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
+func (ci *ConnInfo) getTcpInfo(d []byte) (srcip string, srcport int32, dstip string, dstport int32, err error) {
+	srcip, d, err := ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	srcport, d, err := ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	dstip, d, err := ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	dstport, d, err := ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (err error) {
 	log.Debug("new channel: %s (len: %d)",
 		newChannel.ChannelType(), len(newChannel.ExtraData()))
 
-	if newChannel.ChannelType() != "session" {
+	switch newChannel.ChannelType() {
+	case "session":
+	case "direct-tcpip":
+		ci.Type = "tcpip"
+		srcip, srcport, dstip, dstport, err := srv.getTcpInfo(newChannel.ExtraData())
+		if err != nil {
+			log.Error("tcp info: %s", err.Error())
+			return
+		}
+		log.Debug("mapping %s:%d %s:%d",
+			srcip, srcport, dstip, dstport)
+		ci.ch_ready <- 1
+	default:
+		log.Error("channel type %s not supported.",
+			newChannel.ChannelType())
+		err = ErrChanTypeNotSupported
 		return
 	}
 
 	chout, outreqs, err := client.OpenChannel(
 		newChannel.ChannelType(), newChannel.ExtraData())
 	if err != nil {
+		// TODO: strace UnknownChannelType
 		newChannel.Reject(ssh.UnknownChannelType, err.Error())
 		log.Error("reject channel: %s", err.Error())
 		return
@@ -284,6 +312,9 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) {
 	<-ci.ch_ready
 
 	switch ci.Type {
+	case "tcpip":
+		go CopyChan(chout, chin)
+		go CopyChan(chin, chout)
 	case "shell":
 		go CopyChan(CreateABWriteCloser(chout, ci.in), chin)
 		go CopyChan(CreateABWriteCloser(chin, ci.out), chout)
