@@ -7,6 +7,7 @@ import (
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/op/go-logging"
+	"github.com/shell909090/sshproxy/sshproxy"
 	stdlog "log"
 	"os"
 )
@@ -89,7 +90,7 @@ func main() {
 		return
 	}
 
-	srv, err := CreateServer(cfg.DBFile, cfg.LogDir)
+	srv, err := sshproxy.CreateServer(cfg.DBFile, cfg.LogDir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return

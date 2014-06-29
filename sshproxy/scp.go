@@ -1,14 +1,10 @@
-package main
+package sshproxy
 
 import (
 	"bytes"
 	"errors"
 	"strconv"
 	"strings"
-)
-
-var (
-	ErrScpStreamIllegal = errors.New("scp stream illegal")
 )
 
 type ScpStream struct {

@@ -1,4 +1,4 @@
-package main
+package sshproxy
 
 import (
 	"code.google.com/p/go.crypto/ssh"
@@ -44,39 +44,6 @@ func (srv *Server) getConnInfo(remote net.Addr) (ci *ConnInfo, err error) {
 	return
 }
 
-func (srv *Server) clientBuilder(ci *ConnInfo) (client *ssh.Client, err error) {
-	// load private key from user and host
-	var privateStr string
-	err = srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
-		ci.Username, ci.Host).Scan(&privateStr)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-	private, err := ssh.ParsePrivateKey([]byte(privateStr))
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-
-	config := &ssh.ClientConfig{
-		User: ci.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(private),
-		},
-		HostKeyCallback: ci.checkHostKey,
-	}
-
-	// and try connect it as last step
-	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
-	client, err = ssh.Dial("tcp", hostname, config)
-	if err != nil {
-		log.Error("Failed to dial: %s", err.Error())
-		return
-	}
-	return
-}
-
 func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
 	defer conn.Close()
 
@@ -87,16 +54,17 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 		return
 	}
 	defer srv.closeConn(remote, ci)
+	defer ci.Close()
 
+	// FIXME: proc it?
 	go ssh.DiscardRequests(reqs)
 
-	client, err := srv.clientBuilder(ci)
+	client, err := ci.clientBuilder()
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 	defer client.Close()
-	defer ci.Close()
 
 	log.Debug("handshake ok")
 	for newChannel := range chans {
@@ -109,7 +77,6 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-
 	delete(srv.cis, remote)
 }
 
@@ -172,22 +139,6 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	srv.cis[remote] = ci
-	return
-}
-
-func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
-	log.Info("load private key: %s", filename)
-
-	privateBytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Error("failed to load keyfile: %s", err.Error())
-		return
-	}
-	private, err = ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
 	return
 }
 
