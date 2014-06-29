@@ -126,8 +126,9 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
 	return
 }
 
-func CheckAccess(realname, username, host string, remote net.Addr) (err error) {
+func (srv *Server) CheckAccess(realname, username, host string, remote net.Addr) (err error) {
 	log.Info("user %s@%s will connect %s@%s.", realname, remote, username, host)
+
 	return
 }
 
@@ -156,7 +157,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	}
 
 	// check if realname can access user and host
-	err = CheckAccess(realname, username, host, remote)
+	err = srv.CheckAccess(realname, username, host, remote)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
