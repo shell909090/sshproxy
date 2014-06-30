@@ -75,30 +75,30 @@ func ReadPayloads(payload []byte) (strs []string, err error) {
 	return
 }
 
-type ABWriteCloser struct {
+type MultiWriteCloser struct {
 	a io.WriteCloser
 	b []io.WriteCloser
 }
 
-func CreateABWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (abc *ABWriteCloser) {
-	abc = &ABWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
+func CreateMultiWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (mwc *MultiWriteCloser) {
+	mwc = &MultiWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
 	for _, b := range bs {
-		abc.b = append(abc.b, b.(io.WriteCloser))
+		mwc.b = append(mwc.b, b.(io.WriteCloser))
 	}
 	return
 }
 
-func (abc *ABWriteCloser) Write(p []byte) (n int, err error) {
+func (mwc *MultiWriteCloser) Write(p []byte) (n int, err error) {
 	log.Debug("write out: %d.", len(p))
-	for _, b := range abc.b {
+	for _, b := range mwc.b {
 		defer b.Write(p)
 	}
-	return abc.a.Write(p)
+	return mwc.a.Write(p)
 }
 
-func (abc *ABWriteCloser) Close() (err error) {
-	for _, b := range abc.b {
+func (mwc *MultiWriteCloser) Close() (err error) {
+	for _, b := range mwc.b {
 		defer b.Close()
 	}
-	return abc.a.Close()
+	return mwc.a.Close()
 }

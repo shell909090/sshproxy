@@ -12,6 +12,7 @@ CREATE TABLE hosts (
        'host' TEXT PRIMARY KEY,
        hostname TEXT,
        port INTEGER,
+       proxycommand TEXT,
        hostkeys TEXT
 );
 

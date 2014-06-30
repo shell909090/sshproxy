@@ -4,22 +4,27 @@ import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
-	// "github.com/shell909090/sshproxy/term"
 	"io"
 	"net"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
 
 type ConnInfo struct {
-	srv      *Server
-	Realname string
-	Username string
-	Host     string
-	Hostname string
-	Port     int
-	Hostkeys string
-	RecordId int64
+	srv *Server
+	wg  sync.WaitGroup
+
+	Realname     string
+	Username     string
+	Host         string
+	Hostname     string
+	Port         int
+	ProxyCommand string
+	Hostkeys     string
+	RecordId     int64
+	Starttime    time.Time
 
 	Type      string
 	ch_ready  chan int
@@ -31,12 +36,9 @@ type ConnInfo struct {
 	out io.WriteCloser
 	in  io.WriteCloser
 	cmd io.WriteCloser
-	// e   *term.Emu
 }
 
 func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
-	// chcmd := make(chan string, 0)
-
 	ci = &ConnInfo{
 		srv:      srv,
 		Realname: realname,
@@ -44,12 +46,10 @@ func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo
 		Host:     host,
 
 		ch_ready: make(chan int, 0),
-
-		// e:        term.CreateEmu(chcmd, 80, 25),
 	}
 
-	err = srv.db.QueryRow("SELECT hostname, port, hostkeys FROM hosts WHERE host=?", host).Scan(
-		&ci.Hostname, &ci.Port, &ci.Hostkeys)
+	err = srv.db.QueryRow("SELECT hostname, port, proxycommand, hostkeys FROM hosts WHERE host=?",
+		host).Scan(&ci.Hostname, &ci.Port, &ci.ProxyCommand, &ci.Hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
 		err = ErrHostKey
@@ -69,20 +69,42 @@ func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo
 		return
 	}
 
-	ci.out, err = os.OpenFile(fmt.Sprintf("%s/%d.out", srv.LogDir, ci.RecordId),
-		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	err = ci.prepareFile()
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 
-	ci.in, err = os.OpenFile(fmt.Sprintf("%s/%d.in", srv.LogDir, ci.RecordId),
-		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	return
+}
+
+func (ci *ConnInfo) prepareFile() (err error) {
+	var Starttime string
+
+	err = ci.srv.db.QueryRow("SELECT starttime FROM records WHERE id=?",
+		ci.RecordId).Scan(&Starttime)
 	if err != nil {
-		log.Error("%s", err.Error())
+		return
+	}
+	ci.Starttime, err = time.Parse("2006-01-02 03:04:05", Starttime)
+	if err != nil {
 		return
 	}
 
+	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, ci.Starttime.Format("200601"))
+	err = os.MkdirAll(logDir, 0755)
+	if err != nil {
+		return
+	}
+
+	ci.out, err = os.OpenFile(fmt.Sprintf("%s/%d.out", logDir, ci.RecordId),
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	if err != nil {
+		return
+	}
+
+	ci.in, err = os.OpenFile(fmt.Sprintf("%s/%d.in", logDir, ci.RecordId),
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	return
 }
 
@@ -91,40 +113,6 @@ func (ci *ConnInfo) Close() (err error) {
 		ci.RecordId)
 	if err != nil {
 		log.Error("%s", err.Error())
-		return
-	}
-	return
-}
-
-func (ci *ConnInfo) clientBuilder() (client *ssh.Client, err error) {
-	// load private key from user and host
-	var privateStr string
-	err = ci.srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
-		ci.Username, ci.Host).Scan(&privateStr)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-
-	private, err := ssh.ParsePrivateKey([]byte(privateStr))
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-
-	config := &ssh.ClientConfig{
-		User: ci.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(private),
-		},
-		HostKeyCallback: ci.checkHostKey,
-	}
-
-	// and try connect it as last step
-	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
-	client, err = ssh.Dial("tcp", hostname, config)
-	if err != nil {
-		log.Error("Failed to dial: %s", err.Error())
 		return
 	}
 	return
@@ -154,8 +142,93 @@ func (ci *ConnInfo) checkHostKey(hostname string, remote net.Addr, key ssh.Publi
 	return ErrHostKey
 }
 
+func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
+	// load private key from user and host
+	var privateStr string
+	err = ci.srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
+		ci.Username, ci.Host).Scan(&privateStr)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+
+	private, err := ssh.ParsePrivateKey([]byte(privateStr))
+	if err != nil {
+		log.Error("failed to parse keyfile: %s", err.Error())
+		return
+	}
+
+	config := &ssh.ClientConfig{
+		User: ci.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(private),
+		},
+		HostKeyCallback: ci.checkHostKey,
+	}
+
+	// and try connect it as last step
+	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
+	var conn net.Conn
+	if ci.ProxyCommand == "" {
+		conn, err = net.Dial("tcp", hostname)
+		if err != nil {
+			log.Error("ssh dial failed: %s", err.Error())
+			return
+		}
+	} else {
+		// FIXME: dangerous
+		log.Info("proxy command: %s", ci.ProxyCommand)
+		conn, err = RunCmdNet(ci.ProxyCommand)
+		if err != nil {
+			log.Error("proxy command failed: %s", err.Error())
+			return
+		}
+	}
+	client, chans, reqs, err = ssh.NewClientConn(conn, hostname, config)
+	if err != nil {
+		log.Error("ssh client conn failed: %s", err.Error())
+		return
+	}
+	return
+}
+
+func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
+	if req.Type == "tcpip-forward" {
+		fmt.Sprintf("%v", req.Payload)
+	}
+
+	r, b, err := conn.SendRequest(req.Type, req.WantReply, req.Payload)
+	if err != nil {
+		return err
+	}
+	log.Debug("send req ok: %s(result: %t)(payload: %d)", req.Type, r, len(b))
+
+	err = req.Reply(r, b)
+	if err != nil {
+		return err
+	}
+	log.Debug("reply req ok: %s(result: %t)", req.Type, r)
+	return
+}
+
+func (ci *ConnInfo) serveReqs(conn ssh.Conn, reqs <-chan *ssh.Request) (err error) {
+	defer ci.wg.Done()
+	log.Debug("reqs begin.")
+	for req := range reqs {
+		log.Debug("new req: %s(reply: %t, payload: %d).",
+			req.Type, req.WantReply, len(req.Payload))
+		err = ci.serveReq(conn, req)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return err
+		}
+	}
+	log.Debug("reqs end.")
+	return
+}
+
 func (ci *ConnInfo) on_file_transmit(filename string, size int) {
-	log.Info("transmit %s with name: %s, size: %d, remote dir: %s",
+	log.Notice("%s with name: %s, size: %d, remote dir: %s",
 		ci.Type, filename, size, ci.RemoteDir)
 
 	_, err := ci.srv.db.Exec("INSERT INTO record_files(recordid, type, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, ci.Type, filename, size, ci.RemoteDir)
@@ -166,23 +239,20 @@ func (ci *ConnInfo) on_file_transmit(filename string, size int) {
 	return
 }
 
-func (ci *ConnInfo) on_req(req *ssh.Request) (err error) {
+func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
 	var strs []string
 	switch req.Type {
 	case "env":
 		strs, err = ReadPayloads(req.Payload)
 		if err != nil {
-			log.Error("%s", err.Error())
 			return
 		}
-
 		for _, env := range strs {
 			log.Debug("env: %s", env)
 		}
 	case "exec":
 		strs, err = ReadPayloads(req.Payload)
 		if err != nil {
-			log.Error("%s", err.Error())
 			return
 		}
 
@@ -205,42 +275,58 @@ func (ci *ConnInfo) on_req(req *ssh.Request) (err error) {
 		ci.Type = "shell"
 		log.Info("session in shell mode")
 		ci.ch_ready <- 1
+	case "x11-req":
+		strs, err = ReadPayloads(req.Payload[1:])
+		if err != nil {
+			return
+		}
+		for _, env := range strs {
+			log.Debug("x11: %s", env)
+		}
+	case "pty-req", "keepalive@openssh.com", "auth-agent-req@openssh.com":
+	default:
+		log.Debug("%v", req.Payload)
 	}
 	return nil
 }
 
-func (ci *ConnInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
-	for req := range reqs {
-		log.Debug("new req: %s(reply: %t, payload: %d).",
-			req.Type, req.WantReply, len(req.Payload))
-
-		err := ci.on_req(req)
-		if err != nil {
-			log.Error("%s", err.Error())
-			if req.WantReply {
-				err = req.Reply(false, nil)
-				if err != nil {
-					log.Error("%s", err.Error())
-					return
-				}
-			}
-			continue
-		}
-
-		b, err := ch.SendRequest(req.Type, req.WantReply, req.Payload)
-		if err != nil {
-			log.Error("%s", err.Error())
+func (ci *ConnInfo) serveChanReq(ch ssh.Channel, req *ssh.Request) (err error) {
+	err = ci.onChanReq(req)
+	if err != nil {
+		log.Error("%s", err.Error())
+		errrpy := req.Reply(false, nil)
+		if errrpy != nil {
 			return
 		}
-		log.Debug("send req ok: %s(result: %t)", req.Type, b)
-
-		err = req.Reply(b, nil)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-		log.Debug("reply req ok: %s(result: %t)", req.Type, b)
+		return
 	}
+
+	r, err := ch.SendRequest(req.Type, req.WantReply, req.Payload)
+	if err != nil {
+		return
+	}
+	log.Debug("send chan req ok: %s(result: %t)", req.Type, r)
+
+	err = req.Reply(r, nil)
+	if err != nil {
+		return
+	}
+	log.Debug("reply chan req ok: %s(result: %t)", req.Type, r)
+	return
+}
+
+func (ci *ConnInfo) serveChanReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
+	log.Debug("chan reqs begin.")
+	for req := range reqs {
+		log.Debug("new chan req: %s(reply: %t, payload: %d).",
+			req.Type, req.WantReply, len(req.Payload))
+		err := ci.serveChanReq(ch, req)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+	}
+	log.Debug("chan reqs end.")
 }
 
 func (ci *ConnInfo) getTcpInfo(d []byte) (srcip string, srcport uint32, dstip string, dstport uint32, err error) {
@@ -263,40 +349,44 @@ func (ci *ConnInfo) getTcpInfo(d []byte) (srcip string, srcport uint32, dstip st
 	return
 }
 
-func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (err error) {
-	log.Debug("new channel: %s (len: %d)",
-		newChannel.ChannelType(), len(newChannel.ExtraData()))
-
-	switch newChannel.ChannelType() {
+func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
+	switch newChan.ChannelType() {
 	case "session":
 	case "direct-tcpip":
 		ci.Type = "tcpip"
-		srcip, srcport, dstip, dstport, err := ci.getTcpInfo(newChannel.ExtraData())
+		ip, port, _, _, err := ci.getTcpInfo(newChan.ExtraData())
 		if err != nil {
-			log.Error("tcp info: %s", err.Error())
 			return err
 		}
-		log.Debug("mapping %s:%d %s:%d",
-			srcip, srcport, dstip, dstport)
+		log.Debug("mapping local port to %s:%d", ip, port)
 		ci.ch_ready <- 1
+	case "forwarded-tcpip":
+		ci.Type = "tcpip"
+		ip, port, _, _, err := ci.getTcpInfo(newChan.ExtraData())
+		if err != nil {
+			return err
+		}
+		log.Debug("mapping from remote port to %s:%d", ip, port)
+		ci.ch_ready <- 1
+	case "auth-agent@openssh.com":
+		ci.Type = "sshagent"
 	default:
-		log.Error("channel type %s not supported.",
-			newChannel.ChannelType())
+		log.Error("channel type %s not supported.", newChan.ChannelType())
 		err = ErrChanTypeNotSupported
 		return
 	}
 
-	chout, outreqs, err := client.OpenChannel(
-		newChannel.ChannelType(), newChannel.ExtraData())
+	chout, outreqs, err := conn.OpenChannel(
+		newChan.ChannelType(), newChan.ExtraData())
 	if err != nil {
 		// TODO: strace UnknownChannelType
-		newChannel.Reject(ssh.UnknownChannelType, err.Error())
+		newChan.Reject(ssh.UnknownChannelType, err.Error())
 		log.Error("reject channel: %s", err.Error())
 		return
 	}
 	log.Debug("open channel ok.")
 
-	chin, inreqs, err := newChannel.Accept()
+	chin, inreqs, err := newChan.Accept()
 	if err != nil {
 		log.Error("could not accept channel.")
 		return
@@ -305,8 +395,8 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (er
 
 	ci.chin, ci.chout = chin, chout
 
-	go ci.serveReqs(chin, outreqs)
-	go ci.serveReqs(chout, inreqs)
+	go ci.serveChanReqs(chin, outreqs)
+	go ci.serveChanReqs(chout, inreqs)
 
 	<-ci.ch_ready
 
@@ -314,15 +404,34 @@ func (ci *ConnInfo) serveChan(client *ssh.Client, newChannel ssh.NewChannel) (er
 	case "tcpip":
 		go CopyChan(chout, chin)
 		go CopyChan(chin, chout)
+	case "sshagent":
+		go CopyChan(CreateMultiWriteCloser(chout, &DebugStream{"out"}), chin)
+		go CopyChan(CreateMultiWriteCloser(chin, &DebugStream{"in"}), chout)
 	case "shell":
-		go CopyChan(CreateABWriteCloser(chout, ci.in), chin)
-		go CopyChan(CreateABWriteCloser(chin, ci.out), chout)
+		go CopyChan(CreateMultiWriteCloser(chout, ci.in), chin)
+		go CopyChan(CreateMultiWriteCloser(chin, ci.out), chout)
 	case "scpto":
-		go CopyChan(CreateABWriteCloser(chout, CreateScpStream(ci)), chin)
+		go CopyChan(CreateMultiWriteCloser(chout, CreateScpStream(ci)), chin)
 		go CopyChan(chin, chout)
 	case "scpfrom":
 		go CopyChan(chout, chin)
-		go CopyChan(CreateABWriteCloser(chin, CreateScpStream(ci)), chout)
+		go CopyChan(CreateMultiWriteCloser(chin, CreateScpStream(ci)), chout)
 	}
+	return
+}
+
+func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err error) {
+	defer ci.wg.Done()
+	log.Debug("chans begin.")
+	for newChan := range chans {
+		log.Debug("new channel: %s (len: %d)",
+			newChan.ChannelType(), len(newChan.ExtraData()))
+		err = ci.serveChan(conn, newChan)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+	}
+	log.Debug("chans ends.")
 	return
 }

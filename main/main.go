@@ -19,6 +19,7 @@ type Config struct {
 
 	HostPrivateKeyFile string
 	Listen             string
+	DBDriver           string
 	DBFile             string
 	LogDir             string
 }
@@ -82,7 +83,7 @@ func main() {
 		return
 	}
 
-	srv, err := sshproxy.CreateServer(cfg.DBFile, cfg.LogDir)
+	srv, err := sshproxy.CreateServer(cfg.DBDriver, cfg.DBFile, cfg.LogDir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return

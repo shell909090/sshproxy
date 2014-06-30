@@ -16,13 +16,13 @@ type Server struct {
 	db     *sql.DB
 }
 
-func CreateServer(dbfile, logdir string) (srv *Server, err error) {
+func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
 	srv = &Server{
 		LogDir: logdir,
 		cis:    make(map[net.Addr]*ConnInfo, 0),
 	}
 
-	srv.db, err = sql.Open("sqlite3", dbfile)
+	srv.db, err = sql.Open(dbdriver, dbfile)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -43,10 +43,10 @@ func (srv *Server) getConnInfo(remote net.Addr) (ci *ConnInfo, err error) {
 	return
 }
 
-func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
-	defer conn.Close()
+func (srv *Server) serveConn(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) {
+	defer srvConn.Close()
 
-	remote := conn.RemoteAddr()
+	remote := srvConn.RemoteAddr()
 	ci, err := srv.getConnInfo(remote)
 	if err != nil {
 		log.Error("%s", err.Error())
@@ -55,21 +55,21 @@ func (srv *Server) serveConn(conn *ssh.ServerConn, chans <-chan ssh.NewChannel, 
 	defer srv.closeConn(remote, ci)
 	defer ci.Close()
 
-	// FIXME: proc it?
-	go ssh.DiscardRequests(reqs)
-
-	client, err := ci.clientBuilder()
+	cliConn, cliChans, cliReqs, err := ci.clientBuilder()
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
-	defer client.Close()
+	defer cliConn.Close()
 
 	log.Debug("handshake ok")
-	for newChannel := range chans {
-		ci.serveChan(client, newChannel)
-	}
+	ci.wg.Add(4)
+	go ci.serveReqs(cliConn, srvReqs)
+	go ci.serveReqs(srvConn, cliReqs)
+	go ci.serveChans(cliConn, srvChans)
+	go ci.serveChans(srvConn, cliChans)
 
+	ci.wg.Wait()
 	log.Info("Connect closed.")
 }
 
@@ -93,8 +93,7 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
 }
 
 func (srv *Server) CheckAccess(realname, username, host string, remote net.Addr) (err error) {
-	log.Info("user %s@%s will connect %s@%s.", realname, remote, username, host)
-
+	log.Notice("user %s@%s will connect %s@%s.", realname, remote, username, host)
 	return
 }
 
@@ -172,6 +171,6 @@ func (srv *Server) MainLoop(HostPrivateKeyFile, Listen string) {
 			log.Error("failed to handshake: %s", err.Error())
 			continue
 		}
-		go srv.serveConn(conn, chans, reqs)
+		go srv.serveConn(*conn, chans, reqs)
 	}
 }
