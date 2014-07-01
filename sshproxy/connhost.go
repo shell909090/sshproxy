@@ -96,12 +96,13 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	return
 }
 
+const stmtAccount = "SELECT a.username, a.keys, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE id=? AND a.host=h.host"
+
 func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (conn net.Conn, err error) {
 	var port int
 	var username, keys, hostname, hostkeys string
-	err = ci.srv.db.QueryRow(
-		"SELECT username, keys, hostname, port, hostkeys FROM accounts WHERE id=?",
-		accountid).Scan(&username, &keys, &hostname, &port, &hostkeys)
+	err = ci.srv.db.QueryRow(stmtAccount, accountid).Scan(
+		&username, &keys, &hostname, &port, &hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
