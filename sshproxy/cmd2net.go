@@ -8,23 +8,39 @@ import (
 	"time"
 )
 
+type Waiter interface {
+	Wait() error
+}
+
+type Addr struct {
+	name string
+}
+
+func (a *Addr) Network() string {
+	return "cmd"
+}
+
+func (a *Addr) String() string {
+	return a.name
+}
+
 type CmdNet struct {
-	cmd    *exec.Cmd
+	w      Waiter
+	c      io.Closer
+	name   string
 	stdin  io.WriteCloser
-	stdout io.ReadCloser
+	stdout io.Reader
 }
 
 func RunCmdNet(name string, arg ...string) (cn *CmdNet, err error) {
-	cmd := exec.Command(name, arg...)
-	cn, err = CreateCmdNet(cmd)
-	if err != nil {
-		return
-	}
-	return
+	return CreateCmdNet(exec.Command(name, arg...))
 }
 
 func CreateCmdNet(cmd *exec.Cmd) (cn *CmdNet, err error) {
-	cn = &CmdNet{cmd: cmd}
+	cn = &CmdNet{
+		w:    cmd,
+		name: fmt.Sprintf("pid:%d", cmd.Process.Pid),
+	}
 	cn.stdin, err = cmd.StdinPipe()
 	if err != nil {
 		return
@@ -46,15 +62,18 @@ func (cn *CmdNet) Write(b []byte) (n int, err error) {
 
 func (cn *CmdNet) Close() error {
 	cn.stdin.Close()
-	return cn.cmd.Wait()
+	if cn.c != nil {
+		defer cn.c.Close()
+	}
+	return cn.w.Wait()
 }
 
 func (cn *CmdNet) LocalAddr() net.Addr {
-	return &Addr{cn: cn}
+	return &Addr{name: cn.name}
 }
 
 func (cn *CmdNet) RemoteAddr() net.Addr {
-	return &Addr{cn: cn}
+	return &Addr{name: cn.name}
 }
 
 func (cn *CmdNet) SetDeadline(t time.Time) error {
@@ -67,16 +86,4 @@ func (cn *CmdNet) SetReadDeadline(t time.Time) error {
 
 func (cn *CmdNet) SetWriteDeadline(t time.Time) error {
 	return nil
-}
-
-type Addr struct {
-	cn *CmdNet
-}
-
-func (a *Addr) Network() string {
-	return "cmd"
-}
-
-func (a *Addr) String() string {
-	return fmt.Sprintf("%d", a.cn.cmd.Process.Pid)
 }

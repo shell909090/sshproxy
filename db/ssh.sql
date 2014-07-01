@@ -5,7 +5,7 @@ CREATE TABLE users (
 
 CREATE TABLE user_pubkey (
        realname TEXT REFERENCES users(realname),
-       pubkey TEXT
+       pubkey TEXT PRIMARY KEY
 );
 
 CREATE TABLE hosts (
@@ -13,10 +13,12 @@ CREATE TABLE hosts (
        hostname TEXT,
        port INTEGER,
        proxycommand TEXT,
+       proxyaccount INTEGER REFERENCES accounts(id),
        hostkeys TEXT
 );
 
 CREATE TABLE accounts (
+       id INTEGER PRIMARY KEY,
        username TEXT,
        'host' TEXT REFERENCES hosts('host'),
        keys TEXT
@@ -26,7 +28,7 @@ CREATE TABLE perms (
        realname TEXT REFERENCES users(realname),
        username TEXT,
        'host' TEXT REFERENCES hosts('host'),
-       perm INTEGER
+       perm TEXT
 );
 
 CREATE TABLE records (
@@ -39,6 +41,7 @@ CREATE TABLE records (
 );
 
 CREATE TABLE record_files (
+       id INTEGER PRIMARY KEY,
        recordid INTEGER REFERENCES records(id),
        'type' TEXT,
        filename TEXT,

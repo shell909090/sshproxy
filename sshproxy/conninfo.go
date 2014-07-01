@@ -1,11 +1,9 @@
 package sshproxy
 
 import (
-	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strings"
 	"sync"
@@ -22,6 +20,7 @@ type ConnInfo struct {
 	Hostname     string
 	Port         int
 	ProxyCommand string
+	ProxyAccount int
 	Hostkeys     string
 	RecordId     int64
 	Starttime    time.Time
@@ -38,18 +37,21 @@ type ConnInfo struct {
 	cmd io.WriteCloser
 }
 
+const stmtHost = "SELECT hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?"
+
 func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
 	ci = &ConnInfo{
 		srv:      srv,
 		Realname: realname,
 		Username: username,
 		Host:     host,
-
 		ch_ready: make(chan int, 0),
 	}
 
-	err = srv.db.QueryRow("SELECT hostname, port, proxycommand, hostkeys FROM hosts WHERE host=?",
-		host).Scan(&ci.Hostname, &ci.Port, &ci.ProxyCommand, &ci.Hostkeys)
+	err = srv.db.QueryRow(stmtHost, host).Scan(
+		&ci.Hostname, &ci.Port,
+		&ci.ProxyCommand, &ci.ProxyAccount,
+		&ci.Hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
 		err = ErrHostKey
@@ -113,80 +115,6 @@ func (ci *ConnInfo) Close() (err error) {
 		ci.RecordId)
 	if err != nil {
 		log.Error("%s", err.Error())
-		return
-	}
-	return
-}
-
-func (ci *ConnInfo) checkHostKey(hostname string, remote net.Addr, key ssh.PublicKey) (err error) {
-	log.Debug("check hostkey: %s", hostname)
-
-	hostkey := key.Marshal()
-	log.Info("remote hostkey: %s", key.Type())
-
-	rest := []byte(ci.Hostkeys)
-	for {
-		var public ssh.PublicKey
-		public, _, _, rest, err = ssh.ParseAuthorizedKey(rest)
-		if err != nil {
-			err = nil
-			break
-		}
-		if key.Type() == public.Type() && bytes.Compare(hostkey, public.Marshal()) == 0 {
-			log.Info("host key match: %s", hostname)
-			return nil
-		}
-	}
-
-	log.Info("host key not match: %s", hostname)
-	return ErrHostKey
-}
-
-func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
-	// load private key from user and host
-	var privateStr string
-	err = ci.srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
-		ci.Username, ci.Host).Scan(&privateStr)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-
-	private, err := ssh.ParsePrivateKey([]byte(privateStr))
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-
-	config := &ssh.ClientConfig{
-		User: ci.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(private),
-		},
-		HostKeyCallback: ci.checkHostKey,
-	}
-
-	// and try connect it as last step
-	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
-	var conn net.Conn
-	if ci.ProxyCommand == "" {
-		conn, err = net.Dial("tcp", hostname)
-		if err != nil {
-			log.Error("ssh dial failed: %s", err.Error())
-			return
-		}
-	} else {
-		// FIXME: dangerous
-		log.Info("proxy command: %s", ci.ProxyCommand)
-		conn, err = RunCmdNet(ci.ProxyCommand)
-		if err != nil {
-			log.Error("proxy command failed: %s", err.Error())
-			return
-		}
-	}
-	client, chans, reqs, err = ssh.NewClientConn(conn, hostname, config)
-	if err != nil {
-		log.Error("ssh client conn failed: %s", err.Error())
 		return
 	}
 	return
