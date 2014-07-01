@@ -75,30 +75,22 @@ func ReadPayloads(payload []byte) (strs []string, err error) {
 	return
 }
 
-type MultiWriteCloser struct {
-	a io.WriteCloser
-	b []io.WriteCloser
-}
-
-func CreateMultiWriteCloser(a io.WriteCloser, bs ...io.WriteCloser) (mwc *MultiWriteCloser) {
-	mwc = &MultiWriteCloser{a: a, b: make([]io.WriteCloser, 0)}
-	for _, b := range bs {
-		mwc.b = append(mwc.b, b.(io.WriteCloser))
+func getTcpInfo(d []byte) (srcip string, srcport uint32, dstip string, dstport uint32, err error) {
+	srcip, d, err = ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	srcport, d, err = ReadPayloadUint32(d)
+	if err != nil {
+		return
+	}
+	dstip, d, err = ReadPayloadString(d)
+	if err != nil {
+		return
+	}
+	dstport, d, err = ReadPayloadUint32(d)
+	if err != nil {
+		return
 	}
 	return
-}
-
-func (mwc *MultiWriteCloser) Write(p []byte) (n int, err error) {
-	log.Debug("write out: %d.", len(p))
-	for _, b := range mwc.b {
-		defer b.Write(p)
-	}
-	return mwc.a.Write(p)
-}
-
-func (mwc *MultiWriteCloser) Close() (err error) {
-	for _, b := range mwc.b {
-		defer b.Close()
-	}
-	return mwc.a.Close()
 }
