@@ -9,11 +9,13 @@ from os import path
 
 def main():
     username, host = sys.argv[2].split('@')
-    with open(path.expanduser(sys.argv[3]), 'rb') as fi: prikey = fi.read()
+    prikey = sys.stdin.read()
 
     conn = sqlite3.connect(sys.argv[1])
     c = conn.cursor()
-    c.execute("INSERT INTO accounts VALUES (?, ?, ?)", (username, host, prikey))
+    c.execute(
+        "INSERT INTO accounts(username, host, keys) VALUES (?, ?, ?)",
+        (username, host, prikey))
     conn.commit()
 
 if __name__ == '__main__': main()

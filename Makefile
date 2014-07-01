@@ -28,7 +28,7 @@ ssh.db:
 	mkdir -p logs
 	sqlite3 $@ < db/ssh.sql
 	python db/pubkey.py $@ shell < db/shell.pub
-	python db/hosts.py $@ localhost localhost
-	python db/prikey.py $@ shell@localhost ~/.ssh/id_rsa
+	python db/prikey.py $@ shell@localhost < ~/.ssh/id_rsa
+	python db/hosts.py -a 1 $@ localhost localhost
 
 ### Makefile ends here

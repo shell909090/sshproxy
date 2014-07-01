@@ -37,8 +37,6 @@ type ConnInfo struct {
 	cmd io.WriteCloser
 }
 
-const stmtHost = "SELECT hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?"
-
 func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
 	ci = &ConnInfo{
 		srv:      srv,
@@ -48,13 +46,12 @@ func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo
 		ch_ready: make(chan int, 0),
 	}
 
-	err = srv.db.QueryRow(stmtHost, host).Scan(
+	err = srv.db.QueryRow("SELECT hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?", host).Scan(
 		&ci.Hostname, &ci.Port,
 		&ci.ProxyCommand, &ci.ProxyAccount,
 		&ci.Hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
-		err = ErrHostKey
 		return
 	}
 

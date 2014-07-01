@@ -22,9 +22,8 @@ func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.Publi
 	}
 
 	checkHostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) (err error) {
-		log.Debug("check hostkey: %s", hostname)
 		hostkey := key.Marshal()
-		log.Info("remote hostkey: %s", key.Type())
+		log.Debug("remote hostkey: %s, type: %s", hostname, key.Type())
 
 		for _, public := range publices {
 			if key.Type() == public.Type() && bytes.Compare(hostkey, public.Marshal()) == 0 {
@@ -67,19 +66,27 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
 	var conn net.Conn
 	switch {
-	case ci.ProxyCommand == "":
-		conn, err = net.Dial("tcp", hostname)
+	case ci.ProxyAccount != 0:
+		log.Info("ssh proxy: %s:%d with accountid %d",
+			ci.Hostname, ci.Port, ci.ProxyAccount)
+		conn, err = ci.ConnAccount(ci.ProxyAccount, ci.Hostname, ci.Port)
 		if err != nil {
 			log.Error("ssh dial failed: %s", err.Error())
 			return
 		}
-	case ci.ProxyAccount != 0:
-	default:
+	case ci.ProxyCommand != "":
 		// FIXME: dangerous
 		log.Info("proxy command: %s", ci.ProxyCommand)
 		conn, err = RunCmdNet(ci.ProxyCommand)
 		if err != nil {
-			log.Error("proxy command failed: %s", err.Error())
+			log.Error("command dial failed: %s", err.Error())
+			return
+		}
+	default:
+		log.Info("dail: %s", hostname)
+		conn, err = net.Dial("tcp", hostname)
+		if err != nil {
+			log.Error("tcp dial failed: %s", err.Error())
 			return
 		}
 	}
@@ -108,6 +115,8 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 		return
 	}
 
+	log.Info("ssh to %s@%s:%d", username, hostname, port)
+
 	config, err := genClientConfig(username, keys, hostkeys)
 	if err != nil {
 		return
@@ -124,11 +133,6 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 		return
 	}
 
-	err = session.Run(fmt.Sprintf("nc %s %p", desthost, destport))
-	if err != nil {
-		return
-	}
-
 	cn := &CmdNet{
 		w:    session,
 		c:    client,
@@ -139,6 +143,13 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 		return
 	}
 	cn.stdout, err = session.StdoutPipe()
+	if err != nil {
+		return
+	}
+
+	cmd := fmt.Sprintf("nc %s %d", desthost, destport)
+	log.Debug("cmd: %s", cmd)
+	err = session.Run(cmd)
 	if err != nil {
 		return
 	}

@@ -132,20 +132,20 @@ func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error)
 
 	switch ci.Type {
 	case "tcpip":
-		go CopyChan(chout, chin)
-		go CopyChan(chin, chout)
+		go MultiCopyClose(chin, chout)
+		go MultiCopyClose(chout, chin)
 	case "sshagent":
-		go CopyChan(CreateMultiWriteCloser(chout, &DebugStream{"out"}), chin)
-		go CopyChan(CreateMultiWriteCloser(chin, &DebugStream{"in"}), chout)
+		go MultiCopyClose(chin, chout, &DebugStream{"out"})
+		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "shell":
-		go CopyChan(CreateMultiWriteCloser(chout, ci.in), chin)
-		go CopyChan(CreateMultiWriteCloser(chin, ci.out), chout)
+		go MultiCopyClose(chin, chout, ci.in)
+		go MultiCopyClose(chout, chin, ci.out)
 	case "scpto":
-		go CopyChan(CreateMultiWriteCloser(chout, CreateScpStream(ci)), chin)
-		go CopyChan(chin, chout)
+		go MultiCopyClose(chin, chout, CreateScpStream(ci))
+		go MultiCopyClose(chout, chin)
 	case "scpfrom":
-		go CopyChan(chout, chin)
-		go CopyChan(CreateMultiWriteCloser(chin, CreateScpStream(ci)), chout)
+		go MultiCopyClose(chin, chout)
+		go MultiCopyClose(chout, chin, CreateScpStream(ci))
 	}
 	return
 }

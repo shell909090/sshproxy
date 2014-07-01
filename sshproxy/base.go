@@ -36,15 +36,14 @@ func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
 	return
 }
 
-func CopyChan(d io.WriteCloser, s io.ReadCloser) {
-	defer s.Close()
-	defer d.Close()
-	_, err := io.Copy(d, s)
-
-	switch err {
-	case io.EOF:
-	case nil:
-	default:
+func MultiCopyClose(s io.Reader, ds ...io.WriteCloser) (err error) {
+	var ws []io.Writer
+	for _, d := range ds {
+		ws = append(ws, d.(io.Writer))
+		defer d.Close()
+	}
+	_, err = io.Copy(io.MultiWriter(ws...), s)
+	if err != nil || err != io.EOF {
 		log.Error("%s", err.Error())
 	}
 	return
