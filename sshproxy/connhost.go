@@ -149,7 +149,7 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 
 	cmd := fmt.Sprintf("nc %s %d", desthost, destport)
 	log.Debug("cmd: %s", cmd)
-	err = session.Run(cmd)
+	err = session.Start(cmd)
 	if err != nil {
 		return
 	}

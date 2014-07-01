@@ -132,8 +132,8 @@ func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error)
 
 	switch ci.Type {
 	case "tcpip":
-		go MultiCopyClose(chin, chout)
-		go MultiCopyClose(chout, chin)
+		go MultiCopyClose(chin, chout, &DebugStream{"out"})
+		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "sshagent":
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})

@@ -43,10 +43,23 @@ func MultiCopyClose(s io.Reader, ds ...io.WriteCloser) (err error) {
 		defer d.Close()
 	}
 	_, err = io.Copy(io.MultiWriter(ws...), s)
-	if err != nil || err != io.EOF {
+	if err != nil && err != io.EOF {
 		log.Error("%s", err.Error())
 	}
 	return
+}
+
+type DebugStream struct {
+	Name string
+}
+
+func (ds *DebugStream) Write(p []byte) (n int, err error) {
+	log.Debug("%s write(%d): %v", ds.Name, len(p), p)
+	return len(p), nil
+}
+
+func (ds *DebugStream) Close() error {
+	return nil
 }
 
 func ReadPayloadString(payload []byte) (s string, rest []byte, err error) {
