@@ -43,11 +43,19 @@ def _list():
 
 @route('/pubk/add')
 def _add():
-    pass
+    return template('pubkey_add.html')
+
+@route('/pubk/add', method='POST')
+def _add():
+    return bottle.redirect('/pubk/')
 
 @route('/pubk/<pubk:int>/rem')
 def remove(pubk):
-    pass
+    pubkeys = sess.query(UserPubkey).filter(UserPubkey.id==pubk)
+    logger.debug('delete: %s' % ','.join(str(p.id) for p in pubkeys))
+    map(sess.delete, pubkeys)
+    sess.commit()
+    return bottle.redirect('/pubk/')
 
 @route('/usr/')
 def lists():

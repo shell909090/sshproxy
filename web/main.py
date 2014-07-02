@@ -14,13 +14,11 @@ app = bottle.default_app()
 optlist, args = getopt.getopt(sys.argv[1:], 'a:c:hp:')
 optdict = dict(optlist)
 
-def init():
-    app.config.load_config(optdict.get('-c', 'web.ini'))
-    app.config['db.engine'] = sqlalchemy.create_engine(app.config['db.url'])
-    app.config['db.session'] = sqlalchemy.orm.sessionmaker(bind=app.config['db.engine'])()
-    utils.initlog(app.config.get('log.level', 'INFO'),
-                  app.config.get('log.logfile', ''))
-init()
+app.config.load_config(optdict.get('-c', 'web.ini'))
+app.config['db.engine'] = sqlalchemy.create_engine(app.config['db.url'])
+app.config['db.session'] = sqlalchemy.orm.sessionmaker(bind=app.config['db.engine'])()
+utils.initlog(app.config.get('log.level', 'INFO'),
+              app.config.get('log.logfile', ''))
 
 @bottle.route('/static/<filename:path>')
 def server_static(filename):
