@@ -19,6 +19,9 @@ cleandb:
 run: build ssh.db
 	bin/sshproxy -config config.json
 
+runweb:
+	cd web; python main.py
+
 bin/sshproxy:
 	mkdir -p bin
 	go build -o $@ github.com/shell909090/sshproxy/main

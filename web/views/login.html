@@ -32,6 +32,11 @@
       <form method="post">
 	<table id="login" class="table table-striped table-condensed">
           <thead>
+% if defined('errormsg'):
+	    <tr>
+	      {{errormsg}}
+	    </tr>
+% end
             <tr>
 	      <td>username</td>
 	      <td><input name="username" type="text"/></td>

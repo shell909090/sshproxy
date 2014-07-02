@@ -4,8 +4,14 @@ CREATE TABLE users (
 );
 
 CREATE TABLE user_pubkey (
+       id INTEGER PRIMARY KEY,
+       'name' TEXT,
        realname TEXT REFERENCES users(realname),
-       pubkey TEXT PRIMARY KEY
+       pubkey TEXT
+);
+
+CREATE INDEX IF NOT EXISTS user_pubkey_pubkey ON user_pubkey (
+       pubkey
 );
 
 CREATE TABLE hosts (
@@ -22,6 +28,11 @@ CREATE TABLE accounts (
        username TEXT,
        'host' TEXT REFERENCES hosts('host'),
        keys TEXT
+);
+
+CREATE INDEX IF NOT EXISTS accounts_username_host ON accounts (
+       username,
+       'host'
 );
 
 CREATE TABLE perms (
