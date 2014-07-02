@@ -152,7 +152,7 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 			"port": destport,
 		}
 
-		buf := bytes.NewBuffer()
+		buf := bytes.NewBuffer(nil)
 		err = tmpl.Execute(buf, parameter)
 		if err != nil {
 			return nil, err
