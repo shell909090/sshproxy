@@ -8,13 +8,14 @@ proxy server for ssh
 * hostkey验证
 * 过程记录
 * scp支持和识别
-* local port mapping支持和识别
+* local port mapping/dymanic port mapping支持和识别
 * 内容压缩
 * ssh proxy host跳板连接
 
 # TODO
 
 * 精细权限控制模型
+* google authentication
 * 敏感字断开
 * show replay
 * remote port mapping，不知为何无法成功

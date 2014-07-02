@@ -1,0 +1,53 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>login</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="shell">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap-responsive.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <div class="nav-collapse collapse">
+            <ul class="nav">
+              <li><a href="/">Home</a></li>
+              <li class="active"><a href="#">PS</a></li>
+              <li><a href="/config/">Config</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container">
+      <form method="post">
+	<table id="login" class="table table-striped table-condensed">
+          <thead>
+            <tr>
+	      <td>username</td>
+	      <td><input name="username" type="text"/></td>
+            </tr>
+            <tr>
+	      <td>password</td>
+	      <td><input name="password" type="password"/></td>
+            </tr>
+            <tr>
+	      <td></td>
+	      <td><input value="Login" type="submit"/></td>
+            </tr>
+          <tbody></tbody>
+	</table>
+      </form>
+    </div>
+    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
+  </body>
+</html>

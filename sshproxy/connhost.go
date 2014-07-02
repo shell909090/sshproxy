@@ -5,6 +5,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"net"
+	"text/template"
 )
 
 func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.PublicKey) error) {
@@ -74,14 +75,6 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 			log.Error("ssh dial failed: %s", err.Error())
 			return
 		}
-	case ci.ProxyCommand != "":
-		// FIXME: dangerous
-		log.Info("proxy command: %s", ci.ProxyCommand)
-		conn, err = RunCmdNet(ci.ProxyCommand)
-		if err != nil {
-			log.Error("command dial failed: %s", err.Error())
-			return
-		}
 	default:
 		log.Info("dail: %s", hostname)
 		conn, err = net.Dial("tcp", hostname)
@@ -147,7 +140,28 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 		return
 	}
 
-	cmd := fmt.Sprintf("nc %s %d", desthost, destport)
+	var cmd string
+	if ci.ProxyCommand != "" {
+		tmpl, err := template.New("test").Parse(ci.ProxyCommand)
+		if err != nil {
+			return nil, err
+		}
+
+		parameter := map[string]interface{}{
+			"host": desthost,
+			"port": destport,
+		}
+
+		buf := bytes.NewBuffer()
+		err = tmpl.Execute(buf, parameter)
+		if err != nil {
+			return nil, err
+		}
+		cmd = buf.String()
+	} else {
+		cmd = fmt.Sprintf("nc %s %d", desthost, destport)
+	}
+
 	log.Debug("cmd: %s", cmd)
 	err = session.Start(cmd)
 	if err != nil {
