@@ -7,9 +7,13 @@
 import os, sys, logging
 import bottle, utils
 from bottle import route, template, request
+from sqlalchemy import and_
+from db import *
 
 logger = logging.getLogger('users')
 app = bottle.default_app()
+
+sess = app.config['db.session']
 
 @route('/usr/login')
 def login():
@@ -21,10 +25,8 @@ def login():
     username = request.forms.get('username')
     password = request.forms.get('password')
     logger.debug("login with %s" % username)
-    cur = app.config['db.conn'].cursor()
-    cur.execute('SELECT * FROM users WHERE realname=? AND password=?',
-                (username, password))
-    if cur.fetchone():
+    rslt = list(sess.query(Users).filter(Users.realname==username).filter(Users.password==password))
+    if rslt:
         logger.info("login successed %s." % username)
         session['username'] = username
         return bottle.redirect(request.query.next or '/')
@@ -35,20 +37,16 @@ def login():
 @utils.chklogin()
 def _list():
     session = request.environ.get('beaker.session')
-    cur = app.config['db.conn'].cursor()
     logger.debug("username: %s" % session['username'])
-    cur.execute('SELECT * FROM user_pubkey WHERE realname=?',
-                (session['username'],))
-    pubkeys = cur.fetchall()
-    print pubkeys
-    return ''
+    pubkeys = sess.query(UserPubkey).filter(UserPubkey.realname==session['username'])
+    return template('pubkey_list.html', pubkeys=pubkeys)
 
-@route('/pubk/imp')
-def _import():
+@route('/pubk/add')
+def _add():
     pass
 
-@route('/pubk/rem')
-def remove():
+@route('/pubk/<pubk:int>/rem')
+def remove(pubk):
     pass
 
 @route('/usr/')

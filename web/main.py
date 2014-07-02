@@ -5,17 +5,9 @@
 @author: shell.xu
 '''
 import os, sys, getopt, sqlite3, logging
-import bottle
+import bottle, utils
 from beaker.middleware import SessionMiddleware
-
-LOGFMT = '%(asctime)s.%(msecs)03d[%(levelname)s](%(module)s:%(lineno)d): %(message)s'
-def initlog(lv, logfile=None, stream=None, longdate=False):
-    if isinstance(lv, basestring): lv = getattr(logging, lv)
-    kw = {'format': LOGFMT, 'datefmt': '%H:%M:%S', 'level': lv}
-    if logfile: kw['filename'] = logfile
-    if stream: kw['stream'] = stream
-    if longdate: kw['datefmt'] = '%Y-%m-%d %H:%M:%S'
-    logging.basicConfig(**kw)
+import sqlalchemy, sqlalchemy.orm
 
 logger = logging.getLogger('main')
 app = bottle.default_app()
@@ -24,9 +16,10 @@ optdict = dict(optlist)
 
 def init():
     app.config.load_config(optdict.get('-c', 'web.ini'))
-    app.config['db.conn'] = sqlite3.connect(app.config['db.path'])
-    initlog(app.config.get('log.level', 'INFO'),
-            app.config.get('log.logfile', ''))
+    app.config['db.engine'] = sqlalchemy.create_engine(app.config['db.url'])
+    app.config['db.session'] = sqlalchemy.orm.sessionmaker(bind=app.config['db.engine'])()
+    utils.initlog(app.config.get('log.level', 'INFO'),
+                  app.config.get('log.logfile', ''))
 init()
 
 @bottle.route('/static/<filename:path>')
@@ -36,7 +29,9 @@ def server_static(filename):
 import users, hosts, records
 
 session_opts = {
-    'session.type': 'memory',
+    'session.type': 'ext:database',
+    'session.url': 'sqlite:///../ssh.db',
+    'session.lock_dir': '/var/lock',
     'session.cookie_expires': 300,
     'session.auto': True
 }

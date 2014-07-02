@@ -4,8 +4,17 @@
 @date: 2014-07-02
 @author: shell.xu
 '''
-import os, sys
+import os, sys, logging
 from bottle import request, redirect
+
+LOGFMT = '%(asctime)s.%(msecs)03d[%(levelname)s](%(module)s:%(lineno)d): %(message)s'
+def initlog(lv, logfile=None, stream=None, longdate=False):
+    if isinstance(lv, basestring): lv = getattr(logging, lv)
+    kw = {'format': LOGFMT, 'datefmt': '%H:%M:%S', 'level': lv}
+    if logfile: kw['filename'] = logfile
+    if stream: kw['stream'] = stream
+    if longdate: kw['datefmt'] = '%Y-%m-%d %H:%M:%S'
+    logging.basicConfig(**kw)
 
 def chklogin(perm=None):
     def receiver(func):

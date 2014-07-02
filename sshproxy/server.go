@@ -3,6 +3,7 @@ package sshproxy
 import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"strings"
@@ -80,8 +81,10 @@ func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
 }
 
 func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
+	pubkey := base64.StdEncoding.EncodeToString(key.Marshal())
+	log.Debug("pubkey: %s", pubkey)
 	err = srv.db.QueryRow("SELECT realname FROM user_pubkey WHERE pubkey=?",
-		string(key.Marshal())).Scan(&realname)
+		pubkey).Scan(&realname)
 	switch err {
 	case sql.ErrNoRows:
 		return "", ErrIllegalPubkey
