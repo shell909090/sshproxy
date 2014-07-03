@@ -42,7 +42,8 @@
       <table class="table table-striped table-condensed">
         <thead>
 	  <tr>
-	    <td>name</td><td>pubkeys</td><td>actions</td>
+	    <td>name</td><td>pubkeys</td>
+	    <td>perms</td><td>actions</td>
 	  </tr>
 	</thead>
 	<tbody>
@@ -50,7 +51,11 @@
 	  <tr>
 	    <td>{{user.realname}}</td>
 	    <td>{{len(user.pubkeys)}}</td>
-	    <td><a href="/usr/{{user.realname}}/rem">del</a></td>
+	    <td>{{user.perms}}</td>
+	    <td>
+	      <a href="/usr/{{user.realname}}/edit">edit</a>
+	      <a href="/usr/{{user.realname}}/rem">del</a>
+	    </td>
 	  </tr>
 	  % end
 	</tbody>

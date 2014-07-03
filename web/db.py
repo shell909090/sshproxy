@@ -10,9 +10,11 @@ from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 
 __all__ = ['Users', 'UserPubkey', 'Hosts', 'Accounts',
-           'Records', 'RecordLogs', 'AuditLogs']
+           'Records', 'RecordLogs', 'AuditLogs', 'allperms']
 
 Base = declarative_base()
+
+allperms = ['admin', 'users', 'hosts', 'accounts', 'records', 'audit']
 
 class Users(Base):
     __tablename__ = 'users'
@@ -35,7 +37,7 @@ class Hosts(Base):
     port = Column(Integer)
     proxycommand = Column(String)
     proxyaccount = Column(Integer, ForeignKey('accounts.id'))
-    proxy = relationship("Accounts", foreign_keys=[proxyaccount,], backref='proxyfor')
+    # proxy = relationship("Accounts", foreign_keys=[proxyaccount,], backref='proxyfor')
     hostkeys = Column(String)
 
 class Accounts(Base):

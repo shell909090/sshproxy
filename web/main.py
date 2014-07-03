@@ -5,26 +5,23 @@
 @author: shell.xu
 '''
 import os, sys, getopt, sqlite3, logging
-import bottle, utils
+import bottle
 from beaker.middleware import SessionMiddleware
 import sqlalchemy, sqlalchemy.orm
 
 logger = logging.getLogger('main')
 app = bottle.default_app()
+
 optlist, args = getopt.getopt(sys.argv[1:], 'a:c:hp:')
 optdict = dict(optlist)
 
 app.config.load_config(optdict.get('-c', 'web.ini'))
 app.config['db.engine'] = sqlalchemy.create_engine(app.config['db.url'])
 app.config['db.session'] = sqlalchemy.orm.sessionmaker(bind=app.config['db.engine'])()
+
+import utils
 utils.initlog(app.config.get('log.level', 'INFO'),
               app.config.get('log.logfile', ''))
-
-@bottle.route('/static/<filename:path>')
-def server_static(filename):
-    return bottle.static_file(filename, root='static/')
-
-import users, hosts, records
 
 session_opts = {
     'session.type': 'ext:database',
@@ -34,6 +31,12 @@ session_opts = {
     'session.auto': True
 }
 application = SessionMiddleware(app, session_opts)
+
+@bottle.route('/static/<filename:path>')
+def server_static(filename):
+    return bottle.static_file(filename, root='static/')
+
+import users, hosts, records
 
 def main():
     if '-h' in optdict:

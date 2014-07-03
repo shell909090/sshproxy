@@ -38,6 +38,33 @@
       </div>
     </div>
     <div class="container">
+      <form method="POST">
+	<table>
+	  % perms = set(user.perms.split(','))
+	  % if not user.realname:
+	  <h2>username</h2>
+	  <input name="username" type="text" placeholder="Username"/>
+	  % end
+	  % if defined('errormsg'):
+	  <h2>{{errmsg}}</h2>
+	  % end
+	  % if defined('editself'):
+	  <h2>old password</h2>
+	  <input name="password_old" type="password" placeholder="Keep blank if dont't wanna change"/>
+	  % end
+	  <h2>password</h2>
+	  <input name="password1" type="password" placeholder="Keep blank if dont't wanna change"/>
+	  <h2>verify</h2>
+	  <input name="password2" type="password" placeholder="Keep blank if dont't wanna change"/>
+	  <h2>perms</h2>
+	  % for p in allperms:
+          <label class="checkbox">
+	    <input type="checkbox" name="perms" {{'checked="yes"' if p in perms else ''}} value="{{p}}"/>{{p}}
+	  </label>
+	  % end
+          <button class="btn btn-primary" type="submit">Sign in</button>
+	</table>
+      </form>
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>
