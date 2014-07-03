@@ -16,12 +16,18 @@ def initlog(lv, logfile=None, stream=None, longdate=False):
     if longdate: kw['datefmt'] = '%Y-%m-%d %H:%M:%S'
     logging.basicConfig(**kw)
 
-def chklogin(perm=None):
+def chklogin(perm=None, next=None):
     def receiver(func):
         def _inner(*p, **kw):
             session = request.environ.get('beaker.session')
-            if 'username' not in session:
-                return redirect('/usr/login?next=%s' % request.path)
-            return func(*p, **kw)
+            if 'username' not in session or 'perms' not in session:
+                return redirect('/usr/login?next=%s' % (next or request.path))
+            if perm:
+                if hasattr(perm, '__iter__'):
+                    if not all([p in session['perms'] for p in perm]):
+                        return "you don't have %s permissions" % perm
+                elif perm not in session['perms']:
+                    return "you don't have %s permissions" % perm
+            return func(session, *p, **kw)
         return _inner
     return receiver

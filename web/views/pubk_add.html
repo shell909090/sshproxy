@@ -1,0 +1,46 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>login</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="shell">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap-responsive.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <div class="nav-collapse collapse">
+            <ul class="nav">
+              <li><a href="/">Home</a></li>
+              <li><a href="/h/">Hosts</a></li>
+              <li><a href="/usr/">Users</a></li>
+              <li><a href="/rec/">Records</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container">
+      <form method="POST">
+	<table>
+	  <tr>
+	    <td><textarea name="keys" rows="4" cols="100"></textarea></td>
+	  </tr>
+	  <tr>
+	    <td><input value="Submit" type="submit"/></td>
+	  </tr>
+	</table>
+      </form>
+    </div>
+    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
+  </body>
+</html>

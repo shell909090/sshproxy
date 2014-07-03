@@ -121,7 +121,7 @@ func (ci *ConnInfo) onFileTransmit(filename string, size int) {
 	log.Notice("%s with name: %s, size: %d, remote dir: %s",
 		ci.Type, filename, size, ci.RemoteDir)
 
-	_, err := ci.srv.db.Exec("INSERT INTO record_files(recordid, type, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, ci.Type, filename, size, ci.RemoteDir)
+	_, err := ci.srv.db.Exec("INSERT INTO recordlogs(recordid, type, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, ci.Type, filename, size, ci.RemoteDir)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return

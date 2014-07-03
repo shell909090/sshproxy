@@ -30,7 +30,7 @@ session_opts = {
     'session.type': 'ext:database',
     'session.url': 'sqlite:///../ssh.db',
     'session.lock_dir': '/var/lock',
-    'session.cookie_expires': 300,
+    'session.cookie_expires': 3600,
     'session.auto': True
 }
 application = SessionMiddleware(app, session_opts)

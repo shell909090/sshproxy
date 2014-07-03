@@ -1,6 +1,7 @@
 CREATE TABLE users (
        realname TEXT PRIMARY KEY,
-       password TEXT
+       password TEXT,
+       perms TEXT
 );
 
 CREATE TABLE user_pubkey (
@@ -51,7 +52,7 @@ CREATE TABLE records (
        endtime TEXT
 );
 
-CREATE TABLE record_files (
+CREATE TABLE recordlogs (
        id INTEGER PRIMARY KEY,
        recordid INTEGER REFERENCES records(id),
        'type' TEXT,
@@ -60,7 +61,7 @@ CREATE TABLE record_files (
        remotedir TEXT
 );
 
-CREATE TABLE auditlog (
+CREATE TABLE auditlogs(
        id INTEGER PRIMARY KEY,
        'time' TEXT DEFAULT CURRENT_TIMESTAMP,
        realname TEXT REFERENCES users(realname),
