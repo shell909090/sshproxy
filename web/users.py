@@ -89,7 +89,7 @@ def _list(session):
 @route('/usr/add')
 @utils.chklogin('users')
 def _add(session):
-    return template('usr_edit.html', user=Users(perms=""), allrules=ALLRULES)
+    return template('usr_edit.html', user=Users(perms=""))
 
 @route('/usr/add', method='POST')
 @utils.chklogin('users')
@@ -98,14 +98,14 @@ def _add(session):
     user = sess.query(Users).filter_by(username=username).first()
     if user or not username:
         return template(
-            'usr_edit.html', user=Users(perms=""), allrules=ALLRULES,
+            'usr_edit.html', user=Users(perms=""),
             errmsg="user exist or illegal username")
 
     password1 = request.forms.get('password1')
     password2 = request.forms.get('password2')
     if password1 != password2:
         return template(
-            'usr_edit.html', users=Users(perms=""), allrules=ALLRULES,
+            'usr_edit.html', users=Users(perms=""),
             errmsg="password not match")
 
     perms = set(request.forms.getall('perms')) & set(ALLRULES)
@@ -123,9 +123,9 @@ def _edit(session, username):
     user = sess.query(Users).filter_by(username=username).first()
     if not user:
         return template(
-            'usr_edit.html', user=user, allrules=ALLRULES,
+            'usr_edit.html', user=user,
             errmsg="user not exist")
-    return template('usr_edit.html', user=user, allrules=ALLRULES)
+    return template('usr_edit.html', user=user)
 
 @route('/usr/<username>/edit', method="POST")
 @utils.chklogin('users')
@@ -133,7 +133,7 @@ def _edit(session, username):
     user = sess.query(Users).filter_by(username=username).first()
     if not user:
         return template(
-            'usr_edit.html', user=user, allrules=ALLRULES,
+            'usr_edit.html', user=user,
             errmsg="user not exist")
 
     password1 = request.forms.get('password1')
@@ -141,7 +141,7 @@ def _edit(session, username):
     if all([password1, password2]):
         if password1 != password2:
             return template(
-                'usr_edit.html', users=user, allrules=ALLRULES,
+                'usr_edit.html', users=user,
                 errmsg="password not match")
         user.password = crypto_pass(password1)
         utils.log(logger, 'change password of user %s.' % username)
@@ -156,7 +156,7 @@ def _edit(session, username):
 @utils.chklogin()
 def _edit(session):
     user = sess.query(Users).filter_by(username=session['username']).first()
-    return template('usr_edit.html', user=user, allrules=ALLRULES, editself=True)
+    return template('usr_edit.html', user=user, editself=True)
 
 @route('/usr/edit', method='POST')
 @utils.chklogin()
@@ -165,14 +165,14 @@ def _edit(session):
     if not user:
         return template(
             'usr_edit.html', user=user, editself=True,
-            allrules=ALLRULES, errmsg="user not exist")
+            errmsg="user not exist")
 
     # FIXME: time limit
     password_old = request.forms.get('password_old')
     if check_pass(password_old, user.password):
         return template(
             'usr_edit.html', users=user, editself=True,
-            allrules=ALLRULES, errmsg="old password not match")
+            errmsg="old password not match")
 
     password1 = request.forms.get('password1')
     password2 = request.forms.get('password2')
@@ -180,7 +180,7 @@ def _edit(session):
         if password1 != password2:
             return template(
                 'usr_edit.html', users=user, editself=True,
-                allrules=ALLRULES, errmsg="password not match")
+                errmsg="password not match")
         user.password = crypto_pass(password1)
         utils.log(logger, 'change password of user %s.' % session['username'])
 

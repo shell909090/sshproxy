@@ -39,6 +39,7 @@
       </div>
     </div>
     <div class="container">
+      % from db import ALLRULES
       <form method="POST">
 	<table>
 	  % perms = set(user.perms.split(','))
@@ -59,7 +60,7 @@
 	  <input name="password2" type="password" placeholder="Keep blank if dont't wanna change"/>
 	  % if not defined('editself'):
 	  <h2>perms</h2>
-	  % for p in allrules:
+	  % for p in ALLRULES:
           <label class="checkbox">
 	    <input type="checkbox" name="perms" {{'checked="yes"' if p in perms else ''}} value="{{p}}"/>{{p}}
 	  </label>

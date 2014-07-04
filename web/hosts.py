@@ -16,7 +16,7 @@ sess = app.config['db.session']
 @route('/h/')
 @utils.chklogin()
 def _list(session):
-    return template('hosts.html', hosts=sess.query(Hosts), session=session)
+    return template('hosts.html', hosts=sess.query(Hosts))
 
 @route('/h/add')
 @utils.chklogin('hosts')
@@ -108,7 +108,7 @@ def _renew_hostkey(session, id):
         fo.write(hostkeys)
         fo.flush()
         fps = subprocess.check_output(["ssh-keygen", "-lf", fo.name])
-    return template('hosts_key.html', host=host, hostkeys=hostkeys, fps=fps)
+    return template('hosts_key.html', hostkeys=hostkeys, fps=fps)
 
 @route('/h/<id:int>/renew', method='POST')
 @utils.chklogin('hosts')
@@ -129,7 +129,7 @@ def _list(session, id):
     if not host:
         return 'host not exist.'
     accounts = sess.query(Accounts).filter_by(hostid=id)
-    return template('acct.html', accounts=accounts, host=host, session=session)
+    return template('acct.html', accounts=accounts, host=host)
 
 @route('/acct/<id:int>/add')
 @utils.chklogin('hosts')

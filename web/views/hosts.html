@@ -39,6 +39,8 @@
       </div>
     </div>
     <div class="container">
+      % from bottle import request
+      % session = request.environ.get('beaker.session')
       % if 'hosts' in session['perms']:
       <a href="/h/add">add</a>
       % end
