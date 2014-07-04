@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>user managment</title>
+    <title>host managment</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,23 +39,39 @@
       </div>
     </div>
     <div class="container">
-      <a href="/usr/add">add</a>
+      % if 'hosts' in session['perms']:
+      <a href="/h/add">add</a>
+      % end
       <table class="table table-striped table-condensed">
         <thead>
 	  <tr>
-	    <td>name</td><td>pubkeys</td>
-	    <td>perms</td><td>actions</td>
+	    <td>host</td><td>accounts</td><td>hostname</td>
+	    <td>port</td><td>proxy</td><td>hostkey</td><td>actions</td>
 	  </tr>
 	</thead>
 	<tbody>
-	  % for user in users:
+	  % for host in hosts:
 	  <tr>
-	    <td>{{user.username}}</td>
-	    <td>{{len(user.pubkeys)}}</td>
-	    <td>{{user.perms}}</td>
+	    <td>{{host.host}}</td>
+	    <td><a href="/acct/{{host.id}}">{{len(host.accounts)}}</a></td>
+	    <td>{{host.hostname}}</td>
+	    <td>{{host.port}}</td>
+	    % if host.proxy:
 	    <td>
-	      <a href="/usr/{{user.username}}/edit">edit</a>
-	      <a href="/usr/{{user.username}}/rem">del</a>
+	      <a href="/h/acct/{{host.proxy.id}}/edit">
+		{{'%s@%s' % (host.proxy.account, host.proxy.host.host)}}
+	      </a>
+	    </td>
+	    % else:
+	    <td></td>
+	    % end
+	    <td>{{'yes' if host.hostkeys else 'no'}}</td>
+	    <td>
+	      % if 'hosts' in session['perms']:
+	      <a href="/h/{{host.id}}/renew">renew</a>
+	      <a href="/h/{{host.id}}/edit">edit</a>
+	      <a href="/h/{{host.id}}/rem">del</a>
+	      % end
 	    </td>
 	  </tr>
 	  % end

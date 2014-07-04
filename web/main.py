@@ -16,8 +16,10 @@ optlist, args = getopt.getopt(sys.argv[1:], 'a:c:hp:')
 optdict = dict(optlist)
 
 app.config.load_config(optdict.get('-c', 'web.ini'))
-app.config['db.engine'] = sqlalchemy.create_engine(app.config['db.url'])
-app.config['db.session'] = sqlalchemy.orm.sessionmaker(bind=app.config['db.engine'])()
+engine = sqlalchemy.create_engine(app.config['db.url'])
+sess = sqlalchemy.orm.sessionmaker(bind=engine)()
+app.config['db.engine'] = engine
+app.config['db.session'] = sess
 
 import utils
 utils.initlog(app.config.get('log.level', 'INFO'),
@@ -25,7 +27,7 @@ utils.initlog(app.config.get('log.level', 'INFO'),
 
 session_opts = {
     'session.type': 'ext:database',
-    'session.url': 'sqlite:///../ssh.db',
+    'session.url': app.config['db.url'],
     'session.lock_dir': '/var/lock',
     'session.cookie_expires': 3600,
     'session.auto': True

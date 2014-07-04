@@ -23,6 +23,7 @@
               <li><a href="/">Home</a></li>
               <li><a href="/h/">Hosts</a></li>
               <li><a href="/usr/">Users</a></li>
+              <li><a href="/grp/">Groups</a></li>
               <li><a href="/rec/">Records</a></li>
 	      <li class="dropdown">
 		<a href="#" class="dropdown-toggle" data-toggle="dropdown">My Account<span class="caret"></span></a>
@@ -41,11 +42,11 @@
       <form method="POST">
 	<table>
 	  % perms = set(user.perms.split(','))
-	  % if not user.realname:
+	  % if not user.username:
 	  <h2>username</h2>
 	  <input name="username" type="text" placeholder="Username"/>
 	  % end
-	  % if defined('errormsg'):
+	  % if defined('errmsg'):
 	  <h2>{{errmsg}}</h2>
 	  % end
 	  % if defined('editself'):
@@ -56,13 +57,15 @@
 	  <input name="password1" type="password" placeholder="Keep blank if dont't wanna change"/>
 	  <h2>verify</h2>
 	  <input name="password2" type="password" placeholder="Keep blank if dont't wanna change"/>
+	  % if not defined('editself'):
 	  <h2>perms</h2>
-	  % for p in allperms:
+	  % for p in allrules:
           <label class="checkbox">
 	    <input type="checkbox" name="perms" {{'checked="yes"' if p in perms else ''}} value="{{p}}"/>{{p}}
 	  </label>
 	  % end
-          <button class="btn btn-primary" type="submit">Sign in</button>
+	  % end
+          <button class="btn btn-primary" type="submit">Submit</button>
 	</table>
       </form>
     </div>

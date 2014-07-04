@@ -7,12 +7,10 @@
 import os, sys, logging
 import bottle, utils
 from bottle import route, template, request
-from sqlalchemy import and_
 from db import *
 
 logger = logging.getLogger('users')
 app = bottle.default_app()
-
 sess = app.config['db.session']
 
 @route('/usr/login')
@@ -25,8 +23,8 @@ def _login():
     username = request.forms.get('username')
     password = request.forms.get('password')
     logger.debug("login with %s" % username)
-    user = sess.query(Users).filter_by(realname=username).filter_by(password=password).first()
-    if not user:
+    user = sess.query(Users).filter_by(username=username).first()
+    if not user or not check_pass(password, user.password):
         errmsg = "login failed %s." % username
         logger.info(errmsg)
         return template('login.html', errmsg=errmsg)
@@ -46,7 +44,7 @@ def _logout(session):
 @utils.chklogin()
 def _list(session):
     logger.debug("username: %s" % session['username'])
-    pubkeys = sess.query(UserPubkey).filter_by(realname=session['username'])
+    pubkeys = sess.query(Pubkeys).filter_by(username=session['username'])
     return template('pubk.html', pubkeys=pubkeys)
 
 @route('/pubk/add')
@@ -61,12 +59,12 @@ def _add(session):
     for line in keys.splitlines():
         pubkey, name = line.strip().split()[1:]
         pubkey = pubkey.replace('\r', '').replace('\n', '')
-        pkey = sess.query(UserPubkey).filter_by(pubkey=pubkey).first()
+        pkey = sess.query(Pubkeys).filter_by(pubkey=pubkey).first()
         if not pkey:
             utils.log(logger, 'add pubkey %s' % pubkey)
-            sess.add(UserPubkey(
-                name=name, realname=session['username'], pubkey=pubkey))
-        elif pkey.realname != session['username']:
+            sess.add(Pubkeys(
+                name=name, username=session['username'], pubkey=pubkey))
+        elif pkey.username != session['username']:
             sess.rollback()
             return 'some of your pubkey has been used by other user.'
     sess.commit()
@@ -75,8 +73,8 @@ def _add(session):
 @route('/pubk/<pubk:int>/rem')
 @utils.chklogin()
 def _remove(session, pubk):
-    pubkey = sess.query(UserPubkey).filter_by(id=pubk).first()
-    if pubkey.realname != session['username']:
+    pubkey = sess.query(Pubkeys).filter_by(id=pubk).first()
+    if pubkey.username != session['username']:
         return "can't delete a pubkey not belongs to you."
     utils.log(logger, 'delete pubkey: %d' % pubkey.id)
     sess.delete(pubkey)
@@ -91,28 +89,30 @@ def _list(session):
 @route('/usr/add')
 @utils.chklogin('users')
 def _add(session):
-    return template('usr_edit.html', user=Users(perms=""), allperms=allperms)
+    return template('usr_edit.html', user=Users(perms=""), allrules=ALLRULES)
 
 @route('/usr/add', method='POST')
 @utils.chklogin('users')
 def _add(session):
     username = request.forms.get('username')
-    user = sess.query(Users).filter_by(realname=username).first()
+    user = sess.query(Users).filter_by(username=username).first()
     if user or not username:
-        return template('usr_edit.html', user=Users(perms=""),
-                        allperms=allperms,
-                        errmsg="user exist or illegal username")
+        return template(
+            'usr_edit.html', user=Users(perms=""), allrules=ALLRULES,
+            errmsg="user exist or illegal username")
 
     password1 = request.forms.get('password1')
     password2 = request.forms.get('password2')
     if password1 != password2:
-        return template('usr_edit.html', users=Users(perms=""),
-                        allperms=allperms, errmsg="password not match")
+        return template(
+            'usr_edit.html', users=Users(perms=""), allrules=ALLRULES,
+            errmsg="password not match")
 
-    perms = set(request.forms.getall('perms')) & set(allperms)
+    perms = set(request.forms.getall('perms')) & set(ALLRULES)
     perms = ','.join(perms)
     utils.log(logger, 'create user %s, perms: %s' % (username, perms))
-    user = Users(realname=username, password=password1, perms=perms)
+    user = Users(
+        username=username, password=crypto_pass(password1), perms=perms)
     sess.add(user)
     sess.commit()
     return bottle.redirect('/usr/')
@@ -120,30 +120,33 @@ def _add(session):
 @route('/usr/<username>/edit')
 @utils.chklogin('users')
 def _edit(session, username):
-    user = sess.query(Users).filter_by(realname=username).first()
+    user = sess.query(Users).filter_by(username=username).first()
     if not user:
-        return template('usr_edit.html', user=user,
-                        allperms=allperms, errmsg="user not exist")
-    return template('usr_edit.html', user=user, allperms=allperms)
+        return template(
+            'usr_edit.html', user=user, allrules=ALLRULES,
+            errmsg="user not exist")
+    return template('usr_edit.html', user=user, allrules=ALLRULES)
 
 @route('/usr/<username>/edit', method="POST")
 @utils.chklogin('users')
 def _edit(session, username):
-    user = sess.query(Users).filter_by(realname=username).first()
+    user = sess.query(Users).filter_by(username=username).first()
     if not user:
-        return template('usr_edit.html', user=user,
-                        allperms=allperms, errmsg="user not exist")
+        return template(
+            'usr_edit.html', user=user, allrules=ALLRULES,
+            errmsg="user not exist")
 
     password1 = request.forms.get('password1')
     password2 = request.forms.get('password2')
     if all([password1, password2]):
         if password1 != password2:
-            return template('usr_edit.html', users=user,
-                            allperms=allperms, errmsg="password not match")
-        user.password = password1
+            return template(
+                'usr_edit.html', users=user, allrules=ALLRULES,
+                errmsg="password not match")
+        user.password = crypto_pass(password1)
         utils.log(logger, 'change password of user %s.' % username)
 
-    perms = set(request.forms.getall('perms')) & set(allperms)
+    perms = set(request.forms.getall('perms')) & set(ALLRULES)
     utils.log(logger, 'change perm from %s to %s' % (user.perms, perms))
     user.perms = ','.join(perms)
     sess.commit()
@@ -152,32 +155,36 @@ def _edit(session, username):
 @route('/usr/edit')
 @utils.chklogin()
 def _edit(session):
-    user = sess.query(Users).filter_by(realname=session['username']).first()
-    return template('usr_edit.html', user=user, allperms=allperms, editself=True)
+    user = sess.query(Users).filter_by(username=session['username']).first()
+    return template('usr_edit.html', user=user, allrules=ALLRULES, editself=True)
 
 @route('/usr/edit', method='POST')
 @utils.chklogin()
 def _edit(session):
-    user = sess.query(Users).filter_by(realname=session['username']).first()
+    user = sess.query(Users).filter_by(username=session['username']).first()
     if not user:
-        return template('usr_edit.html', user=user, editself=True,
-                        allperms=allperms, errmsg="user not exist")
+        return template(
+            'usr_edit.html', user=user, editself=True,
+            allrules=ALLRULES, errmsg="user not exist")
 
+    # FIXME: time limit
     password_old = request.forms.get('password_old')
-    if password_old != user.password:
-        return template('usr_edit.html', users=user, editself=True,
-                        allperms=allperms, errmsg="old password not match")
+    if check_pass(password_old, user.password):
+        return template(
+            'usr_edit.html', users=user, editself=True,
+            allrules=ALLRULES, errmsg="old password not match")
 
     password1 = request.forms.get('password1')
     password2 = request.forms.get('password2')
-    if all([password1, password2]):
+    if password1 or password2:
         if password1 != password2:
-            return template('usr_edit.html', users=user, editself=True,
-                            allperms=allperms, errmsg="password not match")
-        user.password = password1
+            return template(
+                'usr_edit.html', users=user, editself=True,
+                allrules=ALLRULES, errmsg="password not match")
+        user.password = crypto_pass(password1)
         utils.log(logger, 'change password of user %s.' % session['username'])
 
-    perms = set(request.forms.getall('perms')) & set(allperms)
+    perms = set(request.forms.getall('perms')) & set(ALLRULES)
     utils.log(logger, 'change perm from %s to %s' % (user.perms, perms))
     user.perms = ','.join(perms)
     sess.commit()
@@ -186,9 +193,9 @@ def _edit(session):
 @route('/usr/<username>/rem')
 @utils.chklogin('users')
 def _remove(session, username):
-    user = sess.query(Users).filter_by(realname=username).first()
+    user = sess.query(Users).filter_by(username=username).first()
     if not user:
-        return '%s not exists'
+        return '%s not exists.' % username
     utils.log(logger, 'delete user: %s' % user.realname)
     sess.delete(user)
     sess.commit()

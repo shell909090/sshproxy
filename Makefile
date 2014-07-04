@@ -29,9 +29,9 @@ bin/sshproxy:
 
 ssh.db:
 	mkdir -p logs
-	sqlite3 $@ < db/ssh.sql
-	python db/pubkey.py $@ shell < db/shell.pub
-	python db/prikey.py $@ shell@localhost < ~/.ssh/id_rsa
-	python db/hosts.py -a 1 $@ localhost localhost
+	cd web; python db.py -b
+	cd web; python db.py -x shell ~/.ssh/authorized_keys
+	cd web; python db.py -m localhost localhost
+	cd web; python db.py -p shell@localhost ~/.ssh/id_rsa
 
 ### Makefile ends here

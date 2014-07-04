@@ -144,6 +144,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	return
 }
 
+// FIXME: time limit
 func (srv *Server) MainLoop(HostPrivateKeyFile, Listen string) {
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: srv.authUser,

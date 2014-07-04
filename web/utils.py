@@ -5,10 +5,11 @@
 @author: shell.xu
 '''
 import os, sys, logging
-from bottle import request, redirect, default_app
+import bottle
+from bottle import request, redirect
 from db import *
 
-sess = default_app().config['db.session']
+sess = bottle.default_app().config['db.session']
 
 LOGFMT = '%(asctime)s.%(msecs)03d[%(levelname)s](%(module)s:%(lineno)d): %(message)s'
 def initlog(lv, logfile=None, stream=None, longdate=False):
@@ -38,4 +39,4 @@ def chklogin(perm=None, next=None):
 def log(logger, log):
     session = request.environ.get('beaker.session')
     logger.info(log)
-    sess.add(AuditLogs(realname=session['username'], log=log))
+    sess.add(AuditLogs(username=session['username'], log=log))

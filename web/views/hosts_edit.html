@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>user managment</title>
+    <title>host managment</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,28 +39,28 @@
       </div>
     </div>
     <div class="container">
-      <a href="/usr/add">add</a>
-      <table class="table table-striped table-condensed">
-        <thead>
-	  <tr>
-	    <td>name</td><td>pubkeys</td>
-	    <td>perms</td><td>actions</td>
-	  </tr>
-	</thead>
-	<tbody>
-	  % for user in users:
-	  <tr>
-	    <td>{{user.username}}</td>
-	    <td>{{len(user.pubkeys)}}</td>
-	    <td>{{user.perms}}</td>
-	    <td>
-	      <a href="/usr/{{user.username}}/edit">edit</a>
-	      <a href="/usr/{{user.username}}/rem">del</a>
-	    </td>
-	  </tr>
+      <form method="POST">
+	<table>
+	  % if defined('errmsg'):
+	  <h2>{{errmsg}}</h2>
 	  % end
-	</tbody>
-      </table>
+	  <h2>name of host</h2>
+	  <input name="host" type="text" value="{{host.hostname if host.hostname else ''}}"/>
+	  <h2>hostname</h2>
+	  <input name="hostname" type="text" value="{{host.hostname if host.hostname else ''}}" placeholder="hostname or ip address"/>
+	  <h2>port</h2>
+	  <input name="port" type="text" value="{{host.port or '22'}}"/>
+	  <h2>proxy command</h2>
+	  <input name="proxycommand" type="text" value="{{host.proxycommand if host.proxycommand else ''}}" placeholder="keep it blank if you don't know"/>
+	  <h2>proxy account</h2>
+	  % if host.proxy:
+	  <input name="proxyaccount" type="text" value="{{'%s@%s' % (host.proxy.account, host.proxy.host.host)}}" placeholder="keep it blank if you don't know"/>
+	  % else:
+	  <input name="proxyaccount" type="text" value="" placeholder="keep it blank if you don't know"/>
+	  % end
+          <button class="btn btn-primary" type="submit">Submit</button>
+	</table>
+      </form>
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>
