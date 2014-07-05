@@ -16,7 +16,11 @@ sess = app.config['db.session']
 @route('/h/')
 @utils.chklogin()
 def _list(session):
-    return template('hosts.html', hosts=sess.query(Hosts))
+    hosts = sess.query(Hosts).order_by(Hosts.id)
+    start, stop, page, pagemax = utils.paging(hosts)
+    return template(
+        'hosts.html', page=page, pagemax=pagemax,
+        hosts=hosts.slice(start, stop))
 
 @route('/h/add')
 @utils.chklogin('hosts')
@@ -27,7 +31,7 @@ def _add(session):
 @utils.chklogin('hosts')
 def _add(session):
     h = request.forms.get('host')
-    host = sess.query(Hosts).filter_by(host=h).first()
+    host = sess.query(Hosts).filter_by(host=h).scalar()
     if host:
         return template('hosts_edit.html', host=Hosts(), errmsg='host exist.')
 
@@ -47,7 +51,7 @@ def _add(session):
         host.proxycommand = request.forms.get('proxycommand')
     if request.forms.get('proxyaccount'):
         a, h = request.forms.get('proxyaccount').split('@', 1)
-        host.proxy = sess.query(Accounts).filter_by(account=a).join(Accounts.host).filter_by(host=h).first()
+        host.proxy = sess.query(Accounts).filter_by(account=a).join(Accounts.host).filter_by(host=h).scalar()
 
     sess.commit()
     return bottle.redirect('/h/')
@@ -55,7 +59,7 @@ def _add(session):
 @route('/h/<id:int>/edit')
 @utils.chklogin('hosts')
 def _edit(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exist.'
     return template('hosts_edit.html', host=host)
@@ -63,7 +67,7 @@ def _edit(session, id):
 @route('/h/<id:int>/edit', method='POST')
 @utils.chklogin('hosts')
 def _edit(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return template('hosts_edit.html', host=Hosts(), errmsg='host not exist.')
 
@@ -80,7 +84,7 @@ def _edit(session, id):
 
     if request.forms.get('proxyaccount'):
         a, h = request.forms.get('proxyaccount').split('@', 1)
-        host.proxy = sess.query(Accounts).filter_by(account=a).join(Accounts.host).filter_by(host=h).first()
+        host.proxy = sess.query(Accounts).filter_by(account=a).join(Accounts.host).filter_by(host=h).scalar()
     else: host.proxy = None
 
     sess.commit()
@@ -89,7 +93,7 @@ def _edit(session, id):
 @route('/h/<id:int>/rem')
 @utils.chklogin('hosts')
 def _remove(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exists.'
     utils.log(logger, 'delete host: %s' % host.host)
@@ -100,7 +104,7 @@ def _remove(session, id):
 @route('/h/<id:int>/renew')
 @utils.chklogin('hosts')
 def _renew_hostkey(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exists.'
     hostkeys = subprocess.check_output(["ssh-keyscan", "-t", "rsa,dsa,ecdsa", host.hostname])
@@ -113,7 +117,7 @@ def _renew_hostkey(session, id):
 @route('/h/<id:int>/renew', method='POST')
 @utils.chklogin('hosts')
 def _renew_hostkey(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exists.'
     hostkeys = request.forms.get('hostkey')
@@ -125,7 +129,7 @@ def _renew_hostkey(session, id):
 @route('/acct/<id:int>')
 @utils.chklogin('hosts')
 def _list(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exist.'
     accounts = sess.query(Accounts).filter_by(hostid=id)
@@ -134,7 +138,7 @@ def _list(session, id):
 @route('/acct/<id:int>/add')
 @utils.chklogin('hosts')
 def _add(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exist.'
     return template('acct_edit.html', acct=Accounts(hostid=id), host=host)
@@ -142,12 +146,12 @@ def _add(session, id):
 @route('/acct/<id:int>/add', method='POST')
 @utils.chklogin('hosts')
 def _add(session, id):
-    host = sess.query(Hosts).filter_by(id=id).first()
+    host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
         return 'host not exist.'
 
     account = request.forms.get('account')
-    acct = sess.query(Accounts).filter_by(account=account, host=host).first()
+    acct = sess.query(Accounts).filter_by(account=account, host=host).scalar()
     if acct:
         return template(
             'acct_edit.html', acct=Accounts(hostid=id), host=host,
@@ -165,7 +169,7 @@ def _add(session, id):
 @route('/acct/<id:int>/edit')
 @utils.chklogin('hosts')
 def _edit(session, id):
-    acct = sess.query(Accounts).filter_by(id=id).first()
+    acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:
         return 'acct not exist.'
     return template('acct_edit.html', acct=acct, host=acct.host)
@@ -173,7 +177,7 @@ def _edit(session, id):
 @route('/acct/<id:int>/edit', method='POST')
 @utils.chklogin('hosts')
 def _edit(session, id):
-    acct = sess.query(Accounts).filter_by(id=id).first()
+    acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:
         return 'acct not exist.'
 
@@ -186,7 +190,7 @@ def _edit(session, id):
 @route('/acct/<id:int>/rem')
 @utils.chklogin('hosts')
 def _remove(session, id):
-    acct = sess.query(Accounts).filter_by(id=id).first()
+    acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:
         return 'acct not exist.'
 

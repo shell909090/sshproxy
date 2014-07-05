@@ -9,7 +9,8 @@ import bottle
 from bottle import request, redirect
 from db import *
 
-sess = bottle.default_app().config['db.session']
+app = bottle.default_app()
+sess = app.config['db.session']
 
 LOGFMT = '%(asctime)s.%(msecs)03d[%(levelname)s](%(module)s:%(lineno)d): %(message)s'
 def initlog(lv, logfile=None, stream=None, longdate=False):
@@ -40,3 +41,12 @@ def log(logger, log):
     session = request.environ.get('beaker.session')
     logger.info(log)
     sess.add(AuditLogs(username=session['username'], log=log))
+
+def paging(objs):
+    page = int(request.query.page or 1)
+    cnt = objs.count()
+    pagenum = int(app.config.get('page.number'))
+    start = (page - 1) * pagenum
+    stop = min(start + pagenum, cnt)
+    pagemax = int((cnt-1) / pagenum) + 1
+    return start, stop, page, pagemax

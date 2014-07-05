@@ -113,22 +113,25 @@ def main():
             username='shell', password=crypto_pass('123'),
             perms=','.join(ALLRULES)))
 
+    # import pubkey for user
     if '-x' in optdict:
-        u = sess.query(Users).filter_by(username=optdict['-x']).first()
+        u = sess.query(Users).filter_by(username=optdict['-x']).one()
         with open(args[0], 'rb') as fi:
             for line in fi:
                 pubkey, name = line.strip().split()[1:]
                 sess.add(Pubkeys(name=name, user=u, pubkey=pubkey))
 
-    if '-p' in optdict:
-        account, h = optdict['-p'].split('@')
-        host = sess.query(Hosts).filter_by(host=h).first()
-        with open(args[0], 'rb') as fi: prikey = fi.read()
-        sess.add(Accounts(account=account, host=host, key=prikey))
-
+    # create host and import hostkey
     if '-m' in optdict:
         hostkeys = subprocess.check_output(["ssh-keyscan", "-t", "rsa,dsa,ecdsa", args[1]])
         sess.add(Hosts(host=args[0], hostname=args[1], port=22, hostkeys=hostkeys))
+
+    # import private key and create account
+    if '-p' in optdict:
+        account, h = optdict['-p'].split('@')
+        host = sess.query(Hosts).filter_by(host=h).one()
+        with open(args[0], 'rb') as fi: prikey = fi.read()
+        sess.add(Accounts(account=account, host=host, key=prikey))
 
     sess.commit()
 

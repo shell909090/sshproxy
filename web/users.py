@@ -23,7 +23,7 @@ def _login():
     username = request.forms.get('username')
     password = request.forms.get('password')
     logger.debug("login with %s" % username)
-    user = sess.query(Users).filter_by(username=username).first()
+    user = sess.query(Users).filter_by(username=username).scalar()
     if not user or not check_pass(password, user.password):
         errmsg = "login failed %s." % username
         logger.info(errmsg)
@@ -40,51 +40,14 @@ def _logout(session):
         del session['username']
     return bottle.redirect(request.query.next or '/')
 
-@route('/pubk/')
-@utils.chklogin()
-def _list(session):
-    logger.debug("username: %s" % session['username'])
-    pubkeys = sess.query(Pubkeys).filter_by(username=session['username'])
-    return template('pubk.html', pubkeys=pubkeys)
-
-@route('/pubk/add')
-@utils.chklogin()
-def _add(session):
-    return template('pubk_add.html')
-
-@route('/pubk/add', method='POST')
-@utils.chklogin()
-def _add(session):
-    keys = request.forms.get('keys')
-    for line in keys.splitlines():
-        pubkey, name = line.strip().split()[1:]
-        pubkey = pubkey.replace('\r', '').replace('\n', '')
-        pkey = sess.query(Pubkeys).filter_by(pubkey=pubkey).first()
-        if not pkey:
-            utils.log(logger, 'add pubkey %s' % pubkey)
-            sess.add(Pubkeys(
-                name=name, username=session['username'], pubkey=pubkey))
-        elif pkey.username != session['username']:
-            sess.rollback()
-            return 'some of your pubkey has been used by other user.'
-    sess.commit()
-    return bottle.redirect('/pubk/')
-
-@route('/pubk/<pubk:int>/rem')
-@utils.chklogin()
-def _remove(session, pubk):
-    pubkey = sess.query(Pubkeys).filter_by(id=pubk).first()
-    if pubkey.username != session['username']:
-        return "can't delete a pubkey not belongs to you."
-    utils.log(logger, 'delete pubkey: %d' % pubkey.id)
-    sess.delete(pubkey)
-    sess.commit()
-    return bottle.redirect('/pubk/')
-
 @route('/usr/')
 @utils.chklogin('users')
 def _list(session):
-    return template('usr.html', users=sess.query(Users))
+    users = sess.query(Users).order_by(Users.username)
+    start, stop, page, pagemax = utils.paging(users)
+    return template(
+        'usr.html', page=page, pagemax=pagemax,
+        users=users.slice(start, stop))
 
 @route('/usr/add')
 @utils.chklogin('users')
@@ -95,7 +58,7 @@ def _add(session):
 @utils.chklogin('users')
 def _add(session):
     username = request.forms.get('username')
-    user = sess.query(Users).filter_by(username=username).first()
+    user = sess.query(Users).filter_by(username=username).scalar()
     if user or not username:
         return template(
             'usr_edit.html', user=Users(perms=""),
@@ -120,7 +83,7 @@ def _add(session):
 @route('/usr/<username>/edit')
 @utils.chklogin('users')
 def _edit(session, username):
-    user = sess.query(Users).filter_by(username=username).first()
+    user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
         return template(
             'usr_edit.html', user=user,
@@ -130,7 +93,7 @@ def _edit(session, username):
 @route('/usr/<username>/edit', method="POST")
 @utils.chklogin('users')
 def _edit(session, username):
-    user = sess.query(Users).filter_by(username=username).first()
+    user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
         return template(
             'usr_edit.html', user=user,
@@ -155,13 +118,13 @@ def _edit(session, username):
 @route('/usr/edit')
 @utils.chklogin()
 def _edit(session):
-    user = sess.query(Users).filter_by(username=session['username']).first()
+    user = sess.query(Users).filter_by(username=session['username']).scalar()
     return template('usr_edit.html', user=user, editself=True)
 
 @route('/usr/edit', method='POST')
 @utils.chklogin()
 def _edit(session):
-    user = sess.query(Users).filter_by(username=session['username']).first()
+    user = sess.query(Users).filter_by(username=session['username']).scalar()
     if not user:
         return template(
             'usr_edit.html', user=user, editself=True,
@@ -193,10 +156,53 @@ def _edit(session):
 @route('/usr/<username>/rem')
 @utils.chklogin('users')
 def _remove(session, username):
-    user = sess.query(Users).filter_by(username=username).first()
+    user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
         return '%s not exists.' % username
     utils.log(logger, 'delete user: %s' % user.realname)
     sess.delete(user)
     sess.commit()
     return bottle.redirect('/usr/')
+
+@route('/pubk/')
+@utils.chklogin()
+def _list(session):
+    logger.debug("username: %s" % session['username'])
+    pubkeys = sess.query(Pubkeys).filter_by(username=session['username'])
+    return template('pubk.html', pubkeys=pubkeys)
+
+@route('/pubk/add')
+@utils.chklogin()
+def _add(session):
+    return template('pubk_add.html')
+
+@route('/pubk/add', method='POST')
+@utils.chklogin()
+def _add(session):
+    keys = request.forms.get('keys')
+    for line in keys.splitlines():
+        pubkey, name = line.strip().split()[1:]
+        pubkey = pubkey.replace('\r', '').replace('\n', '')
+        pkey = sess.query(Pubkeys).filter_by(pubkey=pubkey).scalar()
+        if not pkey:
+            utils.log(logger, 'add pubkey %s' % pubkey)
+            sess.add(Pubkeys(
+                name=name, username=session['username'], pubkey=pubkey))
+        elif pkey.username != session['username']:
+            sess.rollback()
+            return 'some of your pubkey has been used by other user.'
+    sess.commit()
+    return bottle.redirect('/pubk/')
+
+@route('/pubk/<pubk:int>/rem')
+@utils.chklogin()
+def _remove(session, pubk):
+    pubkey = sess.query(Pubkeys).filter_by(id=pubk).scalar()
+    if not pubkey:
+        return 'no such a pubkey'
+    if pubkey.username != session['username']:
+        return "can't delete a pubkey not belongs to you."
+    utils.log(logger, 'delete pubkey: %d' % pubkey.id)
+    sess.delete(pubkey)
+    sess.commit()
+    return bottle.redirect('/pubk/')
