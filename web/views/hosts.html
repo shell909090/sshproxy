@@ -27,7 +27,11 @@
 	<tbody>
 	  % for host in hosts:
 	  <tr>
+	    % if 'hosts' in session['perms']:
+	    <td><a href="/h/{{host.id}}/edit">{{host.host}}</a></td>
+	    % else:
 	    <td>{{host.host}}</td>
+	    % end
 	    <td><a href="/acct/{{host.id}}">{{len(host.accounts)}}</a></td>
 	    <td>{{host.hostname}}</td>
 	    <td>{{host.port}}</td>
@@ -40,11 +44,13 @@
 	    % else:
 	    <td></td>
 	    % end
+	    % if 'hosts' in session['perms']:
+	    <td><a href="/h/{{host.id}}/renew">{{'yes' if host.hostkeys else 'no'}}</a></td>
+	    % else:
 	    <td>{{'yes' if host.hostkeys else 'no'}}</td>
+	    % end
 	    <td>
 	      % if 'hosts' in session['perms']:
-	      <a href="/h/{{host.id}}/renew">renew</a>
-	      <a href="/h/{{host.id}}/edit">edit</a>
 	      <a href="/h/{{host.id}}/rem">del</a>
 	      % end
 	    </td>
