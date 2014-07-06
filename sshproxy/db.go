@@ -1,9 +1,32 @@
 package sshproxy
 
 import (
+	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
+	"encoding/base64"
+	"net"
 	"time"
 )
+
+func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
+	pubkey := base64.StdEncoding.EncodeToString(key.Marshal())
+	log.Debug("pubkey: %s", pubkey)
+	err = srv.db.QueryRow("SELECT username FROM pubkeys WHERE pubkey=?",
+		pubkey).Scan(&username)
+	switch err {
+	case sql.ErrNoRows:
+		return "", ErrIllegalPubkey
+	case nil:
+	default:
+		log.Error("%s", err.Error())
+	}
+	return
+}
+
+func (srv *Server) checkAccess(username, account, host string, remote net.Addr) (err error) {
+	log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
+	return
+}
 
 func (ci *ConnInfo) loadHost() (err error) {
 	var ProxyCommand sql.NullString

@@ -31,8 +31,8 @@ type ConnInfo struct {
 	RemoteDir string
 }
 
-func (srv *Server) createConnInfo(username, account, host string) (ci *ConnInfo, err error) {
-	ci = &ConnInfo{
+func (srv *Server) createConnProcesser(username, account, host string) (cp ConnProcesser, err error) {
+	ci := &ConnInfo{
 		srv:      srv,
 		Username: username,
 		Account:  account,
@@ -46,7 +46,11 @@ func (srv *Server) createConnInfo(username, account, host string) (ci *ConnInfo,
 	}
 
 	err = ci.insertRecord()
-	return
+	if err != nil {
+		return
+	}
+
+	return ci, nil
 }
 
 func (ci *ConnInfo) Close() (err error) {

@@ -162,3 +162,20 @@ func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err 
 	log.Debug("chans ends.")
 	return
 }
+
+func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) (err error) {
+	cliConn, cliChans, cliReqs, err := ci.clientBuilder()
+	if err != nil {
+		return
+	}
+	defer cliConn.Close()
+
+	log.Debug("handshake ok")
+	ci.wg.Add(4)
+	go ci.serveReqs(cliConn, srvReqs)
+	go ci.serveReqs(srvConn, cliReqs)
+	go ci.serveChans(cliConn, srvChans)
+	go ci.serveChans(srvConn, cliChans)
+	ci.wg.Wait()
+	return
+}
