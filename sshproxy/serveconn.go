@@ -3,6 +3,7 @@ package sshproxy
 import (
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
+	"strings"
 )
 
 func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
@@ -115,18 +116,33 @@ func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error)
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "shell":
-		out, err := ci.prepareFile("out")
+		out, err := ci.prepareFile("out", "")
+		if err != nil {
+			return err
+		}
+		go MultiCopyClose(chin, chout)
+		go MultiCopyClose(chout, chin, out)
+	case "exec":
+		out, err := ci.prepareFile("out", strings.Join(ci.ExecCmds, "\r"))
 		if err != nil {
 			return err
 		}
 		go MultiCopyClose(chin, chout)
 		go MultiCopyClose(chout, chin, out)
 	case "scpto":
-		go MultiCopyClose(chin, chout, CreateScpStream(ci))
+		if ci.srv.logfiletransfer >= 1 {
+			go MultiCopyClose(chin, chout, CreateScpStream(ci))
+		} else {
+			go MultiCopyClose(chin, chout)
+		}
 		go MultiCopyClose(chout, chin)
 	case "scpfrom":
 		go MultiCopyClose(chin, chout)
-		go MultiCopyClose(chout, chin, CreateScpStream(ci))
+		if ci.srv.logfiletransfer >= 1 {
+			go MultiCopyClose(chout, chin, CreateScpStream(ci))
+		} else {
+			go MultiCopyClose(chout, chin)
+		}
 	}
 	return
 }

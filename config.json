@@ -6,5 +6,7 @@
     "Listen": "0.0.0.0:2022",
     "DBDriver": "sqlite3",
     "DBFile": "ssh.db",
-    "LogDir": "logs"
+    "LogDir": "logs",
+
+    "LogFileTransfer": 1
 }

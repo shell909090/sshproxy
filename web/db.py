@@ -85,12 +85,9 @@ class RecordLogs(Base):
     recordid = Column(Integer, ForeignKey('records.id'))
     time = Column(DateTime, nullable=False, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
     type = Column(Integer, nullable=False)
-    log = Column(String)
-    ip = Column(String)
-    port = Column(Integer)
-    filename = Column(String)
-    size = Column(Integer)
-    remotedir = Column(String)
+    log1 = Column(String)
+    log2 = Column(String)
+    num1 = Column(Integer)
 
 class AuditLogs(Base):
     __tablename__ = 'auditlogs'

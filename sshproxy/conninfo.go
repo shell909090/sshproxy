@@ -22,9 +22,10 @@ type ConnInfo struct {
 	ProxyCommand string
 	ProxyAccount int
 	Hostkeys     string
+	RecordId     int64
 
-	RecordId int64
-
+	// FIXME: this is should not in conn, it's sessions's thing.
+	ExecCmds  []string
 	Type      string
 	ch_ready  chan int
 	RemoteDir string
@@ -52,7 +53,7 @@ func (ci *ConnInfo) Close() (err error) {
 	return ci.updateEndtime()
 }
 
-func (ci *ConnInfo) prepareFile(ext string) (w io.WriteCloser, err error) {
+func (ci *ConnInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
 	starttime, err := ci.getStarttime()
 	if err != nil {
 		return
@@ -64,7 +65,7 @@ func (ci *ConnInfo) prepareFile(ext string) (w io.WriteCloser, err error) {
 		return
 	}
 
-	RecordLogsId, err := ci.insertRecordLogs(ci.Type, "", "", 0, "", 0, "")
+	RecordLogsId, err := ci.insertRecordLogs(ci.Type, cmd, "", 0)
 	if err != nil {
 		return
 	}
@@ -74,16 +75,20 @@ func (ci *ConnInfo) prepareFile(ext string) (w io.WriteCloser, err error) {
 	return
 }
 
-func (ci *ConnInfo) onFileTransmit(filename string, size int) (err error) {
+func (ci *ConnInfo) onFileTransmit(filename string, size int) (id int64, err error) {
 	log.Notice("%s with name: %s, size: %d, remote dir: %s",
 		ci.Type, filename, size, ci.RemoteDir)
-	_, err = ci.insertRecordLogs(ci.Type, "", "", 0, filename, size, ci.RemoteDir)
+	id, err = ci.insertRecordLogs(ci.Type, filename, ci.RemoteDir, size)
+	return
+}
+
+func (ci *ConnInfo) onFileData(b []byte) (err error) {
 	return
 }
 
 func (ci *ConnInfo) onTcpForward(direct, ip string, port uint32) (err error) {
 	log.Notice("mapping %s port to %s:%d", direct, ip, port)
-	_, err = ci.insertRecordLogs(ci.Type, "", ip, int(port), "", 0, "")
+	_, err = ci.insertRecordLogs(ci.Type, ip, "", int(port))
 	return
 }
 
@@ -107,17 +112,24 @@ func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
 		log.Debug("exec with cmd: %s.", strs[0])
 		cmds := strings.Split(strs[0], " ")
 
-		if cmds[0] == "scp" {
+		switch cmds[0] {
+		case "scp":
 			switch cmds[len(cmds)-2] {
 			case "-t":
 				ci.Type = "scpto"
 			case "-f":
 				ci.Type = "scpfrom"
+			default:
+				ci.Type = "unknown"
 			}
+			ci.ch_ready <- 1
 			ci.RemoteDir = cmds[len(cmds)-1]
 			log.Info("session in %s mode, remote dir: %s.",
 				ci.Type, ci.RemoteDir)
+		default:
+			ci.Type = "exec"
 			ci.ch_ready <- 1
+			ci.ExecCmds = append(ci.ExecCmds, strs[0])
 		}
 	case "shell":
 		ci.Type = "shell"

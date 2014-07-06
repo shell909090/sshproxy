@@ -64,9 +64,14 @@ def _list(session):
 @route('/rec/<id:int>')
 @utils.chklogin('audit')
 def _show(session, id):
-    pass
+    rec = sess.query(Records).filter_by(id=id).scalar()
+    reclogs = sess.query(RecordLogs).filter_by(recordid=id).order_by(RecordLogs.time)
+    start, stop, page, pagemax = utils.paging(reclogs)
+    return template(
+        'rec.html', page=page, pagemax=pagemax,
+        rec=rec, reclogs=reclogs.slice(start, stop))
 
-@route('/out/<id:int>')
+@route('/rlog/<id:int>')
 @utils.chklogin('audit')
 def _show(session, id):
     rec = sess.query(Records).filter_by(id=id).scalar()

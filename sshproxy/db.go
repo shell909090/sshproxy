@@ -55,8 +55,8 @@ func (ci *ConnInfo) updateEndtime() (err error) {
 	return
 }
 
-func (ci *ConnInfo) insertRecordLogs(rltype, logstr, ip string, port int, filename string, size int, remotedir string) (id int64, err error) {
-	res, err := ci.srv.db.Exec("INSERT INTO recordlogs(recordid, type, log, ip, port, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, rltype, logstr, ip, port, filename, size, remotedir)
+func (ci *ConnInfo) insertRecordLogs(rltype, log1, log2 string, num1 int) (id int64, err error) {
+	res, err := ci.srv.db.Exec("INSERT INTO recordlogs(recordid, type, log1, log2, num1) VALUES (?, ?, ?, ?, ?)", ci.RecordId, rltype, log1, log2, num1)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return

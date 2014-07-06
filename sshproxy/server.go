@@ -11,16 +11,18 @@ import (
 )
 
 type Server struct {
-	LogDir string
-	cis    map[net.Addr]*ConnInfo
-	mu     sync.Mutex
-	db     *sql.DB
+	db              *sql.DB
+	mu              sync.Mutex
+	cis             map[net.Addr]*ConnInfo
+	LogDir          string
+	logfiletransfer int
 }
 
-func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
+func CreateServer(dbdriver, dbfile, logdir string, logfiletransfer int) (srv *Server, err error) {
 	srv = &Server{
-		LogDir: logdir,
-		cis:    make(map[net.Addr]*ConnInfo, 0),
+		cis:             make(map[net.Addr]*ConnInfo, 0),
+		LogDir:          logdir,
+		logfiletransfer: logfiletransfer,
 	}
 
 	srv.db, err = sql.Open(dbdriver, dbfile)

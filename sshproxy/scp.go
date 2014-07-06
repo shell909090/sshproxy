@@ -8,6 +8,7 @@ import (
 
 type ScpStream struct {
 	ci      *ConnInfo
+	fileid  int64
 	ignores int
 }
 
@@ -36,7 +37,7 @@ func (ss *ScpStream) Write(p []byte) (n int, err error) {
 				return
 			}
 
-			err = ss.ci.onFileTransmit(strings.Trim(meta[2], "\r\n"), size)
+			ss.fileid, err = ss.ci.onFileTransmit(strings.Trim(meta[2], "\r\n"), size)
 			if err != nil {
 				return
 			}
@@ -46,6 +47,10 @@ func (ss *ScpStream) Write(p []byte) (n int, err error) {
 			l := len(p)
 			if l > ss.ignores {
 				l = ss.ignores
+			}
+			err = ss.ci.onFileData(p[:l])
+			if err != nil {
+				return
 			}
 			p = p[l:]
 			ss.ignores -= l
