@@ -16,6 +16,7 @@ var (
 	ErrIllegalPubkey        = errors.New("illegal pubkey")
 	ErrCINotFound           = errors.New("conn info not found")
 	ErrHostKey              = errors.New("host key not match")
+	ErrDataBase             = errors.New("database error")
 )
 
 var log = logging.MustGetLogger("")

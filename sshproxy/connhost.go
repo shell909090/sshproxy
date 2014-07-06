@@ -38,7 +38,7 @@ func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.Publi
 	return
 }
 
-func genClientConfig(Username, PrivateKey, HostKey string) (config *ssh.ClientConfig, err error) {
+func genClientConfig(Account, PrivateKey, HostKey string) (config *ssh.ClientConfig, err error) {
 	private, err := ssh.ParsePrivateKey([]byte(PrivateKey))
 	if err != nil {
 		log.Error("failed to parse keyfile: %s", err.Error())
@@ -46,7 +46,7 @@ func genClientConfig(Username, PrivateKey, HostKey string) (config *ssh.ClientCo
 	}
 
 	config = &ssh.ClientConfig{
-		User:            Username,
+		User:            Account,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(private)},
 		HostKeyCallback: CheckHostKey(HostKey),
 	}
@@ -56,8 +56,8 @@ func genClientConfig(Username, PrivateKey, HostKey string) (config *ssh.ClientCo
 func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
 	// load private key from user and host
 	var PrivateKey string
-	err = ci.srv.db.QueryRow("SELECT keys FROM accounts WHERE username=? AND host=?",
-		ci.Username, ci.Host).Scan(&PrivateKey)
+	err = ci.srv.db.QueryRow("SELECT key FROM accounts WHERE account=? AND hostid=?",
+		ci.Account, ci.Hostid).Scan(&PrivateKey)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -84,7 +84,7 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 		}
 	}
 
-	config, err := genClientConfig(ci.Username, PrivateKey, ci.Hostkeys)
+	config, err := genClientConfig(ci.Account, PrivateKey, ci.Hostkeys)
 	if err != nil {
 		return
 	}
@@ -96,12 +96,10 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	return
 }
 
-const stmtAccount = "SELECT a.username, a.keys, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE id=? AND a.host=h.host"
-
 func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (conn net.Conn, err error) {
 	var port int
 	var username, keys, hostname, hostkeys string
-	err = ci.srv.db.QueryRow(stmtAccount, accountid).Scan(
+	err = ci.srv.db.QueryRow("SELECT a.account, a.key, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE a.id=? AND a.hostid=h.id", accountid).Scan(
 		&username, &keys, &hostname, &port, &hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())

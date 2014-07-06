@@ -6,16 +6,20 @@
 '''
 import os, sys
 import bcrypt, sqlalchemy
-from sqlalchemy import Table, Column, Integer, String, DateTime, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import or_, Table, Column, Integer, String
+from sqlalchemy import DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 
 __all__ = ['Users', 'Pubkeys', 'Hosts', 'Accounts', 'Groups',
-           'Records', 'RecordLogs', 'AuditLogs', 'ALLRULES', 'crypto_pass', 'check_pass']
+           'Records', 'RecordLogs', 'AuditLogs',
+           'ALLRULES', 'ALLPERMS', 'crypto_pass', 'check_pass',
+           'or_']
 
 Base = declarative_base()
 
-ALLRULES = ['admin', 'users', 'hosts', 'accounts', 'groups', 'records', 'audit']
+ALLRULES = ['admin', 'users', 'hosts', 'groups', 'audit']
+ALLPERMS = ['shell', 'scpfrom', 'scpto', 'tcp', 'agent']
 
 def crypto_pass(p):
     return bcrypt.hashpw(p, bcrypt.gensalt())
@@ -41,13 +45,13 @@ class Pubkeys(Base):
 class Hosts(Base):
     __tablename__ = 'hosts'
     id = Column(Integer, primary_key=True)
-    host = Column(String, index=True)
+    host = Column(String, index=True, unique=True, nullable=False)
     hostname = Column(String, nullable=False)
-    port = Column(Integer)
+    port = Column(Integer, nullable=False)
     proxycommand = Column(String)
     proxyaccount = Column(Integer, ForeignKey('accounts.id', use_alter=True, name='hosts_proxy_account'))
     proxy = relationship("Accounts", foreign_keys=[proxyaccount,])
-    hostkeys = Column(String)
+    hostkeys = Column(String, nullable=False)
 
 class Accounts(Base):
     __tablename__ = 'accounts'
@@ -55,7 +59,7 @@ class Accounts(Base):
     account = Column(String, index=True, nullable=False)
     hostid = Column(Integer, ForeignKey("hosts.id"))
     host = relationship("Hosts", backref='accounts', foreign_keys=[hostid,])
-    key = Column(String)
+    key = Column(String, nullable=False)
     __table_args__ = (
         UniqueConstraint('account', 'hostid', name='account_host'),)
 
@@ -79,7 +83,7 @@ class RecordLogs(Base):
     __tablename__ = 'recordlogs'
     id = Column(Integer, primary_key=True)
     recordid = Column(Integer, ForeignKey('records.id'))
-    time = Column(DateTime, nullable=False)
+    time = Column(DateTime, nullable=False, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
     type = Column(Integer, nullable=False)
     log = Column(String)
     filename = Column(String)

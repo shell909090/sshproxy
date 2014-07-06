@@ -5,7 +5,7 @@
 @author: shell.xu
 '''
 import os, sys, logging, tempfile, subprocess
-import bottle, utils, sqlalchemy
+import bottle, utils
 from bottle import route, template, request
 from db import *
 
@@ -19,7 +19,7 @@ def _list(session):
     hosts = sess.query(Hosts)
     q = request.query.q
     if q:
-        hosts = hosts.filter(sqlalchemy.or_(
+        hosts = hosts.filter(or_(
                 Hosts.host.like('%'+q+'%'),
                 Hosts.hostname.like('%'+q+'%')))
     hosts = hosts.order_by(Hosts.id)
@@ -50,7 +50,8 @@ def _add(session):
     host = Hosts(
         host=request.forms.get('host'),
         hostname=request.forms.get('hostname'),
-        port=int(request.forms.get('port')))
+        port=int(request.forms.get('port')),
+        hostkeys='')
     sess.add(host)
 
     if request.forms.get('proxycommand'):
@@ -188,8 +189,10 @@ def _edit(session, id):
         return 'acct not exist.'
 
     utils.log(logger, 'edit account: %s@%s' % (acct.account, acct.host.host))
-    acct.account = request.forms.get('account')
-    acct.key = request.forms.get('key')
+    if request.forms.get('account'):
+        acct.account = request.forms.get('account')
+    if request.forms.get('key'):
+        acct.key = request.forms.get('key')
     sess.commit()
     return bottle.redirect('/acct/%d' % int(acct.hostid))
 

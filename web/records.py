@@ -5,15 +5,29 @@
 @author: shell.xu
 '''
 import os, sys, logging
-import bottle
+import bottle, utils
 from bottle import route, template, request
+from db import *
+
 
 logger = logging.getLogger('records')
 app = bottle.default_app()
+sess = app.config['db.session']
+
+def adv_query(objs, q):
+    return objs
 
 @route('/rec/')
-def _list():
-    pass
+@utils.chklogin('audit')
+def _list(session):
+    recs = sess.query(Records)
+    q = request.query.q
+    if q: recs = adv_query(recs, q)
+    recs = recs.order_by(Records.starttime)
+    start, stop, page, pagemax = utils.paging(recs)
+    return template(
+        'recs.html', page=page, pagemax=pagemax,
+        recs=recs.slice(start, stop))
 
 @route('/rec/<rec:int>')
 def _show(rec):

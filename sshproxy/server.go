@@ -80,11 +80,11 @@ func (srv *Server) closeConn(remote net.Addr, ci *ConnInfo) {
 	delete(srv.cis, remote)
 }
 
-func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
+func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
 	pubkey := base64.StdEncoding.EncodeToString(key.Marshal())
 	log.Debug("pubkey: %s", pubkey)
-	err = srv.db.QueryRow("SELECT realname FROM user_pubkey WHERE pubkey=?",
-		pubkey).Scan(&realname)
+	err = srv.db.QueryRow("SELECT username FROM pubkeys WHERE pubkey=?",
+		pubkey).Scan(&username)
 	switch err {
 	case sql.ErrNoRows:
 		return "", ErrIllegalPubkey
@@ -95,8 +95,8 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (realname string, err error) {
 	return
 }
 
-func (srv *Server) CheckAccess(realname, username, host string, remote net.Addr) (err error) {
-	log.Notice("user %s@%s will connect %s@%s.", realname, remote, username, host)
+func (srv *Server) CheckAccess(username, account, host string, remote net.Addr) (err error) {
+	log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
 	return
 }
 
@@ -115,23 +115,23 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 			return
 		}
 	}
-	username := i[0]
+	account := i[0]
 	host := i[1]
 
-	realname, err := srv.findPubkey(key)
+	username, err := srv.findPubkey(key)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 
 	// check if realname can access user and host
-	err = srv.CheckAccess(realname, username, host, remote)
+	err = srv.CheckAccess(username, account, host, remote)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 
-	ci, err := srv.createConnInfo(realname, username, host)
+	ci, err := srv.createConnInfo(username, account, host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return

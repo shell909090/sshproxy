@@ -1,0 +1,39 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>audit</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="shell">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap-responsive.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css" />
+  </head>
+  <body>
+    % include("nav.html")
+    <div class="container">
+      <form>
+	<input name="q" type="text"/>
+	<button class="btn" type="submit">query</button>
+      </form>
+      <table class="table table-striped table-condensed">
+        <thead>
+	  <tr>
+	    <td>username</td><td>host</td><td>time</td>
+	  </tr>
+	</thead>
+	<tbody>
+	  % for rec in recs:
+	  <tr>
+	    <td>{{rec.username}}</td>
+	    <td>{{rec.account}}@{{rec.host}}</td>
+	    <td>{{rec.starttime}}</td>
+	  % end
+	</tbody>
+      </table>
+      % include("page.html", page=page, pagemax=pagemax)
+    </div>
+    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
+    <script src="/static/js/bootstrap.min.js"></script>
+  </body>
+</html>

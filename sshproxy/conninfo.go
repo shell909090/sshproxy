@@ -2,6 +2,7 @@ package sshproxy
 
 import (
 	"code.google.com/p/go.crypto/ssh"
+	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -14,16 +15,18 @@ type ConnInfo struct {
 	srv *Server
 	wg  sync.WaitGroup
 
-	Realname     string
 	Username     string
+	Account      string
+	Hostid       int
 	Host         string
 	Hostname     string
 	Port         int
 	ProxyCommand string
 	ProxyAccount int
 	Hostkeys     string
-	RecordId     int64
-	Starttime    time.Time
+
+	RecordId  int64
+	Starttime time.Time
 
 	Type      string
 	ch_ready  chan int
@@ -37,26 +40,32 @@ type ConnInfo struct {
 	cmd io.WriteCloser
 }
 
-func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo, err error) {
+func (srv *Server) createConnInfo(username, account, host string) (ci *ConnInfo, err error) {
 	ci = &ConnInfo{
 		srv:      srv,
-		Realname: realname,
 		Username: username,
+		Account:  account,
 		Host:     host,
 		ch_ready: make(chan int, 0),
 	}
 
-	err = srv.db.QueryRow("SELECT hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?", host).Scan(
-		&ci.Hostname, &ci.Port,
-		&ci.ProxyCommand, &ci.ProxyAccount,
-		&ci.Hostkeys)
+	var ProxyCommand sql.NullString
+	var ProxyAccount sql.NullInt64
+	err = srv.db.QueryRow("SELECT id, hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?", host).Scan(
+		&ci.Hostid, &ci.Hostname, &ci.Port, &ProxyCommand, &ProxyAccount, &ci.Hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
+	if ProxyCommand.Valid {
+		ci.ProxyCommand = ProxyCommand.String
+	}
+	if ProxyAccount.Valid {
+		ci.ProxyAccount = int(ProxyAccount.Int64)
+	}
 
-	res, err := srv.db.Exec("INSERT INTO records(realname, username, host) values(?,?,?)",
-		ci.Realname, ci.Username, ci.Host)
+	res, err := srv.db.Exec("INSERT INTO records(username, account, host) values(?,?,?)",
+		ci.Username, ci.Account, ci.Host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -78,19 +87,13 @@ func (srv *Server) createConnInfo(realname, username, host string) (ci *ConnInfo
 }
 
 func (ci *ConnInfo) prepareFile() (err error) {
-	var Starttime string
-
 	err = ci.srv.db.QueryRow("SELECT starttime FROM records WHERE id=?",
-		ci.RecordId).Scan(&Starttime)
-	if err != nil {
-		return
-	}
-	ci.Starttime, err = time.Parse("2006-01-02 03:04:05", Starttime)
+		ci.RecordId).Scan(&ci.Starttime)
 	if err != nil {
 		return
 	}
 
-	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, ci.Starttime.Format("200601"))
+	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, ci.Starttime.Format("20060102"))
 	err = os.MkdirAll(logDir, 0755)
 	if err != nil {
 		return
