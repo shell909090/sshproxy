@@ -5,7 +5,7 @@
 @author: shell.xu
 '''
 import os, sys, logging, tempfile, subprocess
-import bottle, utils
+import bottle, utils, sqlalchemy
 from bottle import route, template, request
 from db import *
 
@@ -16,7 +16,13 @@ sess = app.config['db.session']
 @route('/h/')
 @utils.chklogin()
 def _list(session):
-    hosts = sess.query(Hosts).order_by(Hosts.id)
+    hosts = sess.query(Hosts)
+    q = request.query.q
+    if q:
+        hosts = hosts.filter(sqlalchemy.or_(
+                Hosts.host.like('%'+q+'%'),
+                Hosts.hostname.like('%'+q+'%')))
+    hosts = hosts.order_by(Hosts.id)
     start, stop, page, pagemax = utils.paging(hosts)
     return template(
         'hosts.html', page=page, pagemax=pagemax,

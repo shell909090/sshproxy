@@ -16,6 +16,10 @@
       % session = request.environ.get('beaker.session')
       % if 'hosts' in session['perms']:
       <a href="/h/add">add</a>
+      <form>
+	<input name="q" type="text"/>
+	<button class="btn" type="submit">query</button>
+      </form>
       % end
       <table class="table table-striped table-condensed">
         <thead>
@@ -58,19 +62,7 @@
 	  % end
 	</tbody>
       </table>
-      % if page != 1:
-      <a href="{{request.path}}">first</a>
-      <a href="{{request.path}}?page={{page-1}}">prev</a>
-      % end
-      {{'...' if 3 < page else ''}}
-      % for i in xrange(max(1, page-2), min(page+3, pagemax+1)):
-      <a class="{{'pagenow' if i == page else ''}}" href="{{request.path}}?page={{i}}">{{i}}</a>
-      % end
-      {{'...' if page+2 < pagemax else ''}}
-      % if page != pagemax:
-      <a href="{{request.path}}?page={{page+1}}">next</a>
-      <a href="{{request.path}}?page={{pagemax}}">end</a>
-      % end
+      % include("page.html", page=page, pagemax=pagemax)
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>

@@ -1,0 +1,18 @@
+      % import urllib
+      % from bottle import request
+      % query = [i for i in request.query.iterallitems() if i[0] != 'page']
+      % base = lambda x: '%s?%s' % (
+      %     request.path, urllib.urlencode(query+[('page', x),]))
+      % if page != 1:
+      <a href="{{base(1)}}">first</a>
+      <a href="{{base(page-1)}}">prev</a>
+      % end
+      {{'...' if 3 < page else ''}}
+      % for i in xrange(max(1, page-2), min(page+3, pagemax+1)):
+      <a class="{{'pagenow' if i == page else ''}}" href="{{base(i)}}">{{i}}</a>
+      % end
+      {{'...' if page+2 < pagemax else ''}}
+      % if page < pagemax:
+      <a href="{{base(page+1)}}">next</a>
+      <a href="{{base(pagemax)}}">end</a>
+      % end

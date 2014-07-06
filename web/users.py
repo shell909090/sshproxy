@@ -43,7 +43,11 @@ def _logout(session):
 @route('/usr/')
 @utils.chklogin('users')
 def _list(session):
-    users = sess.query(Users).order_by(Users.username)
+    users = sess.query(Users)
+    q = request.query.q
+    if q:
+        users = users.filter(Users.username.like('%'+q+'%'))
+    users = users.order_by(Users.username)
     start, stop, page, pagemax = utils.paging(users)
     return template(
         'usr.html', page=page, pagemax=pagemax,
