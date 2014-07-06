@@ -80,29 +80,8 @@ func (ci *ConnInfo) serveChanReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 }
 
 func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
-	switch newChan.ChannelType() {
-	case "session":
-	case "direct-tcpip":
-		ci.Type = "tcpip"
-		ip, port, _, _, err := getTcpInfo(newChan.ExtraData())
-		if err != nil {
-			return err
-		}
-		log.Debug("mapping local port to %s:%d", ip, port)
-		ci.ch_ready <- 1
-	case "forwarded-tcpip":
-		ci.Type = "tcpip"
-		ip, port, _, _, err := getTcpInfo(newChan.ExtraData())
-		if err != nil {
-			return err
-		}
-		log.Debug("mapping from remote port to %s:%d", ip, port)
-		ci.ch_ready <- 1
-	case "auth-agent@openssh.com":
-		ci.Type = "sshagent"
-	default:
-		log.Error("channel type %s not supported.", newChan.ChannelType())
-		err = ErrChanTypeNotSupported
+	err = ci.onChanType(newChan.ChannelType(), newChan.ExtraData())
+	if err != nil {
 		return
 	}
 
@@ -123,23 +102,25 @@ func (ci *ConnInfo) serveChan(conn ssh.Conn, newChan ssh.NewChannel) (err error)
 	}
 	log.Debug("accept channel ok.")
 
-	ci.chin, ci.chout = chin, chout
-
 	go ci.serveChanReqs(chin, outreqs)
 	go ci.serveChanReqs(chout, inreqs)
 
 	<-ci.ch_ready
 
 	switch ci.Type {
-	case "tcpip":
+	case "local", "remote":
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "sshagent":
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "shell":
-		go MultiCopyClose(chin, chout, ci.in)
-		go MultiCopyClose(chout, chin, ci.out)
+		out, err := ci.prepareFile("out")
+		if err != nil {
+			return err
+		}
+		go MultiCopyClose(chin, chout)
+		go MultiCopyClose(chout, chin, out)
 	case "scpto":
 		go MultiCopyClose(chin, chout, CreateScpStream(ci))
 		go MultiCopyClose(chout, chin)

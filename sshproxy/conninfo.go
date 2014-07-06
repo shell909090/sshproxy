@@ -2,13 +2,11 @@ package sshproxy
 
 import (
 	"code.google.com/p/go.crypto/ssh"
-	"database/sql"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 type ConnInfo struct {
@@ -25,19 +23,11 @@ type ConnInfo struct {
 	ProxyAccount int
 	Hostkeys     string
 
-	RecordId  int64
-	Starttime time.Time
+	RecordId int64
 
 	Type      string
 	ch_ready  chan int
 	RemoteDir string
-
-	chin  ssh.Channel
-	chout ssh.Channel
-
-	out io.WriteCloser
-	in  io.WriteCloser
-	cmd io.WriteCloser
 }
 
 func (srv *Server) createConnInfo(username, account, host string) (ci *ConnInfo, err error) {
@@ -49,86 +39,51 @@ func (srv *Server) createConnInfo(username, account, host string) (ci *ConnInfo,
 		ch_ready: make(chan int, 0),
 	}
 
-	var ProxyCommand sql.NullString
-	var ProxyAccount sql.NullInt64
-	err = srv.db.QueryRow("SELECT id, hostname, port, proxycommand, proxyaccount, hostkeys FROM hosts WHERE host=?", host).Scan(
-		&ci.Hostid, &ci.Hostname, &ci.Port, &ProxyCommand, &ProxyAccount, &ci.Hostkeys)
+	err = ci.loadHost()
 	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-	if ProxyCommand.Valid {
-		ci.ProxyCommand = ProxyCommand.String
-	}
-	if ProxyAccount.Valid {
-		ci.ProxyAccount = int(ProxyAccount.Int64)
-	}
-
-	res, err := srv.db.Exec("INSERT INTO records(username, account, host) values(?,?,?)",
-		ci.Username, ci.Account, ci.Host)
-	if err != nil {
-		log.Error("%s", err.Error())
 		return
 	}
 
-	ci.RecordId, err = res.LastInsertId()
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-
-	err = ci.prepareFile()
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-
+	err = ci.insertRecord()
 	return
 }
 
-func (ci *ConnInfo) prepareFile() (err error) {
-	err = ci.srv.db.QueryRow("SELECT starttime FROM records WHERE id=?",
-		ci.RecordId).Scan(&ci.Starttime)
+func (ci *ConnInfo) Close() (err error) {
+	return ci.updateEndtime()
+}
+
+func (ci *ConnInfo) prepareFile(ext string) (w io.WriteCloser, err error) {
+	starttime, err := ci.getStarttime()
 	if err != nil {
 		return
 	}
 
-	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, ci.Starttime.Format("20060102"))
+	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, starttime.Format("20060102"))
 	err = os.MkdirAll(logDir, 0755)
 	if err != nil {
 		return
 	}
 
-	ci.out, err = os.OpenFile(fmt.Sprintf("%s/%d.out", logDir, ci.RecordId),
-		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	RecordLogsId, err := ci.insertRecordLogs(ci.Type, "", "", 0, "", 0, "")
 	if err != nil {
 		return
 	}
 
-	ci.in, err = os.OpenFile(fmt.Sprintf("%s/%d.in", logDir, ci.RecordId),
+	w, err = os.OpenFile(fmt.Sprintf("%s/%d.%s", logDir, RecordLogsId, ext),
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	return
 }
 
-func (ci *ConnInfo) Close() (err error) {
-	_, err = ci.srv.db.Exec("UPDATE records SET endtime=CURRENT_TIMESTAMP WHERE id=?",
-		ci.RecordId)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-	return
-}
-
-func (ci *ConnInfo) onFileTransmit(filename string, size int) {
+func (ci *ConnInfo) onFileTransmit(filename string, size int) (err error) {
 	log.Notice("%s with name: %s, size: %d, remote dir: %s",
 		ci.Type, filename, size, ci.RemoteDir)
+	_, err = ci.insertRecordLogs(ci.Type, "", "", 0, filename, size, ci.RemoteDir)
+	return
+}
 
-	_, err := ci.srv.db.Exec("INSERT INTO recordlogs(recordid, type, filename, size, remotedir) VALUES (?, ?, ?, ?, ?)", ci.RecordId, ci.Type, filename, size, ci.RemoteDir)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
+func (ci *ConnInfo) onTcpForward(direct, ip string, port uint32) (err error) {
+	log.Notice("mapping %s port to %s:%d", direct, ip, port)
+	_, err = ci.insertRecordLogs(ci.Type, "", ip, int(port), "", 0, "")
 	return
 }
 
@@ -181,4 +136,43 @@ func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
 		log.Debug("%v", req.Payload)
 	}
 	return nil
+}
+
+func (ci *ConnInfo) onChanType(chantype string, extra []byte) (err error) {
+	switch chantype {
+	case "session":
+	case "direct-tcpip":
+		ci.Type = "local"
+		ci.ch_ready <- 1
+
+		ip, port, _, _, err := getTcpInfo(extra)
+		if err != nil {
+			return err
+		}
+
+		err = ci.onTcpForward("local", ip, port)
+		if err != nil {
+			return err
+		}
+	case "forwarded-tcpip":
+		ci.Type = "remote"
+		ci.ch_ready <- 1
+
+		ip, port, _, _, err := getTcpInfo(extra)
+		if err != nil {
+			return err
+		}
+
+		err = ci.onTcpForward("remote", ip, port)
+		if err != nil {
+			return err
+		}
+	case "auth-agent@openssh.com":
+		ci.Type = "sshagent"
+		ci.ch_ready <- 1
+	default:
+		log.Error("channel type %s not supported.", chantype)
+		err = ErrChanTypeNotSupported
+	}
+	return
 }

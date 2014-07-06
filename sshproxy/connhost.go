@@ -55,11 +55,8 @@ func genClientConfig(Account, PrivateKey, HostKey string) (config *ssh.ClientCon
 
 func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
 	// load private key from user and host
-	var PrivateKey string
-	err = ci.srv.db.QueryRow("SELECT key FROM accounts WHERE account=? AND hostid=?",
-		ci.Account, ci.Hostid).Scan(&PrivateKey)
+	key, err := ci.getPrikey()
 	if err != nil {
-		log.Error("%s", err.Error())
 		return
 	}
 
@@ -84,7 +81,7 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 		}
 	}
 
-	config, err := genClientConfig(ci.Account, PrivateKey, ci.Hostkeys)
+	config, err := genClientConfig(ci.Account, key, ci.Hostkeys)
 	if err != nil {
 		return
 	}
@@ -97,18 +94,13 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 }
 
 func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (conn net.Conn, err error) {
-	var port int
-	var username, keys, hostname, hostkeys string
-	err = ci.srv.db.QueryRow("SELECT a.account, a.key, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE a.id=? AND a.hostid=h.id", accountid).Scan(
-		&username, &keys, &hostname, &port, &hostkeys)
+	account, keys, hostname, port, hostkeys, err := ci.getProxy(accountid)
 	if err != nil {
-		log.Error("%s", err.Error())
 		return
 	}
+	log.Info("ssh to %s@%s:%d", account, hostname, port)
 
-	log.Info("ssh to %s@%s:%d", username, hostname, port)
-
-	config, err := genClientConfig(username, keys, hostkeys)
+	config, err := genClientConfig(account, keys, hostkeys)
 	if err != nil {
 		return
 	}

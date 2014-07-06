@@ -36,7 +36,10 @@ func (ss *ScpStream) Write(p []byte) (n int, err error) {
 				return
 			}
 
-			ss.ci.onFileTransmit(strings.Trim(meta[2], "\r\n"), size)
+			err = ss.ci.onFileTransmit(strings.Trim(meta[2], "\r\n"), size)
+			if err != nil {
+				return
+			}
 			ss.ignores = size
 			return len(p), nil
 		default:

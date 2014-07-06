@@ -86,6 +86,8 @@ class RecordLogs(Base):
     time = Column(DateTime, nullable=False, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
     type = Column(Integer, nullable=False)
     log = Column(String)
+    ip = Column(String)
+    port = Column(Integer)
     filename = Column(String)
     size = Column(Integer)
     remotedir = Column(String)
