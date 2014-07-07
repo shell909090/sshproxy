@@ -50,19 +50,6 @@ func MultiCopyClose(s io.Reader, ds ...io.WriteCloser) (err error) {
 	return
 }
 
-type DebugStream struct {
-	Name string
-}
-
-func (ds *DebugStream) Write(p []byte) (n int, err error) {
-	log.Debug("%s write(%d): %v", ds.Name, len(p), p)
-	return len(p), nil
-}
-
-func (ds *DebugStream) Close() error {
-	return nil
-}
-
 func ReadPayloadString(payload []byte) (s string, rest []byte, err error) {
 	size := binary.BigEndian.Uint32(payload[:4])
 	s = string(payload[4 : 4+size])
@@ -106,4 +93,17 @@ func getTcpInfo(d []byte) (srcip string, srcport uint32, dstip string, dstport u
 		return
 	}
 	return
+}
+
+type DebugStream struct {
+	Name string
+}
+
+func (ds *DebugStream) Write(p []byte) (n int, err error) {
+	log.Debug("%s write(%d): %v", ds.Name, len(p), p)
+	return len(p), nil
+}
+
+func (ds *DebugStream) Close() error {
+	return nil
 }

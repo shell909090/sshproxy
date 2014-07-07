@@ -6,14 +6,18 @@ import (
 	"strings"
 )
 
+type FileRecorder interface {
+	FileTransmit(string, int) error
+	FileData([]byte) error
+}
+
 type ScpStream struct {
-	ci      *ConnInfo
-	fileid  int64
+	fr      FileRecorder
 	ignores int
 }
 
-func CreateScpStream(ci *ConnInfo) (ss *ScpStream) {
-	return &ScpStream{ci: ci}
+func CreateScpStream(fr FileRecorder) (ss *ScpStream) {
+	return &ScpStream{fr: fr}
 }
 
 func (ss *ScpStream) Write(p []byte) (n int, err error) {
@@ -37,7 +41,7 @@ func (ss *ScpStream) Write(p []byte) (n int, err error) {
 				return
 			}
 
-			ss.fileid, err = ss.ci.onFileTransmit(strings.Trim(meta[2], "\r\n"), size)
+			err = ss.fr.FileTransmit(strings.Trim(meta[2], "\r\n"), size)
 			if err != nil {
 				return
 			}
@@ -48,7 +52,7 @@ func (ss *ScpStream) Write(p []byte) (n int, err error) {
 			if l > ss.ignores {
 				l = ss.ignores
 			}
-			err = ss.ci.onFileData(p[:l])
+			err = ss.fr.FileData(p[:l])
 			if err != nil {
 				return
 			}

@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
-	"io"
 	"net"
-	"os"
-	"strings"
 	"sync"
 	"text/template"
 )
@@ -207,6 +204,7 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 }
 
 func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
+	// FIXME: just for debug
 	if req.Type == "tcpip-forward" {
 		fmt.Sprintf("%v", req.Payload)
 	}

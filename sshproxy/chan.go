@@ -1,60 +1,69 @@
 package sshproxy
 
+import (
+	"code.google.com/p/go.crypto/ssh"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
 type ChanInfo struct {
-	ci        *ConnInfo
-	Type      string
-	RemoteDir string
-	ExecCmds  []string
+	ci           *ConnInfo
+	RecordLogsId int64
+	Type         string
+	RemoteDir    string
+	ExecCmds     []string
 }
 
 func CreateChanInfo(ci *ConnInfo) (chi *ChanInfo) {
-	chi := &ChanInfo{
+	chi = &ChanInfo{
 		ci:   ci,
 		Type: "unknown",
 	}
 	return chi
 }
 
-func (ci *ConnInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
-	starttime, err := ci.getStarttime()
+func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
+	starttime, err := chi.ci.getStarttime()
 	if err != nil {
 		return
 	}
 
-	logDir := fmt.Sprintf("%s/%s", ci.srv.LogDir, starttime.Format("20060102"))
+	logDir := fmt.Sprintf("%s/%s", chi.ci.srv.LogDir, starttime.Format("20060102"))
 	err = os.MkdirAll(logDir, 0755)
 	if err != nil {
 		return
 	}
 
-	RecordLogsId, err := ci.insertRecordLogs(ci.Type, cmd, "", 0)
+	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, cmd, "", 0)
 	if err != nil {
 		return
 	}
 
-	w, err = os.OpenFile(fmt.Sprintf("%s/%d.%s", logDir, RecordLogsId, ext),
+	w, err = os.OpenFile(fmt.Sprintf("%s/%d.%s", logDir, chi.RecordLogsId, ext),
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	return
 }
 
-func (ci *ConnInfo) onTcpForward(direct, ip string, port uint32) (err error) {
+func (chi *ChanInfo) onTcpForward(direct, ip string, port uint32) (err error) {
 	log.Notice("mapping %s port to %s:%d", direct, ip, port)
-	_, err = ci.insertRecordLogs(ci.Type, ip, "", int(port))
+	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, ip, "", int(port))
 	return
 }
 
-func (ci *ConnInfo) onFileTransmit(filename string, size int) (id int64, err error) {
+func (chi *ChanInfo) FileTransmit(filename string, size int) (err error) {
 	log.Notice("%s with name: %s, size: %d, remote dir: %s",
-		ci.Type, filename, size, ci.RemoteDir)
-	id, err = ci.insertRecordLogs(ci.Type, filename, ci.RemoteDir, size)
+		chi.Type, filename, size, chi.RemoteDir)
+	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, filename, chi.RemoteDir, size)
 	return
 }
 
-func (ci *ConnInfo) onFileData(b []byte) (err error) {
+func (chi *ChanInfo) FileData(b []byte) (err error) {
 	return
 }
 
-func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
+func (chi *ChanInfo) onReq(req *ssh.Request) (err error) {
 	var strs []string
 	switch req.Type {
 	case "env":
@@ -78,25 +87,20 @@ func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
 		case "scp":
 			switch cmds[len(cmds)-2] {
 			case "-t":
-				ci.Type = "scpto"
+				chi.Type = "scpto"
 			case "-f":
-				ci.Type = "scpfrom"
-			default:
-				ci.Type = "unknown"
+				chi.Type = "scpfrom"
 			}
-			ci.ch_ready <- 1
-			ci.RemoteDir = cmds[len(cmds)-1]
+			chi.RemoteDir = cmds[len(cmds)-1]
 			log.Info("session in %s mode, remote dir: %s.",
-				ci.Type, ci.RemoteDir)
+				chi.Type, chi.RemoteDir)
 		default:
-			ci.Type = "exec"
-			ci.ch_ready <- 1
-			ci.ExecCmds = append(ci.ExecCmds, strs[0])
+			chi.Type = "exec"
+			chi.ExecCmds = append(chi.ExecCmds, strs[0])
 		}
 	case "shell":
-		ci.Type = "shell"
+		chi.Type = "shell"
 		log.Info("session in shell mode")
-		ci.ch_ready <- 1
 	case "x11-req":
 		strs, err = ReadPayloads(req.Payload[1:])
 		if err != nil {
@@ -112,35 +116,35 @@ func (ci *ConnInfo) onChanReq(req *ssh.Request) (err error) {
 	return nil
 }
 
-func (ci *ChanInfo) onChanType(chantype string, extra []byte) (err error) {
+func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 	switch chantype {
 	case "session":
 	case "direct-tcpip":
-		ci.Type = "local"
+		chi.Type = "local"
 
 		ip, port, _, _, err := getTcpInfo(extra)
 		if err != nil {
 			return err
 		}
 
-		err = ci.onTcpForward("local", ip, port)
+		err = chi.onTcpForward("local", ip, port)
 		if err != nil {
 			return err
 		}
 	case "forwarded-tcpip":
-		ci.Type = "remote"
+		chi.Type = "remote"
 
 		ip, port, _, _, err := getTcpInfo(extra)
 		if err != nil {
 			return err
 		}
 
-		err = ci.onTcpForward("remote", ip, port)
+		err = chi.onTcpForward("remote", ip, port)
 		if err != nil {
 			return err
 		}
 	case "auth-agent@openssh.com":
-		ci.Type = "sshagent"
+		chi.Type = "sshagent"
 	default:
 		log.Error("channel type %s not supported.", chantype)
 		err = ErrChanTypeNotSupported
@@ -148,14 +152,11 @@ func (ci *ChanInfo) onChanType(chantype string, extra []byte) (err error) {
 	return
 }
 
-func (ci *ConnInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
-	err = ci.onChanReq(req)
+func (chi *ChanInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
+	err = chi.onReq(req)
 	if err != nil {
 		log.Error("%s", err.Error())
-		errrpy := req.Reply(false, nil)
-		if errrpy != nil {
-			return
-		}
+		req.Reply(false, nil)
 		return
 	}
 
@@ -173,12 +174,12 @@ func (ci *ConnInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
 	return
 }
 
-func (ci *ChanInfo) ServeReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
+func (ci *ChanInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	log.Debug("chan reqs begin.")
 	for req := range reqs {
 		log.Debug("new chan req: %s(reply: %t, payload: %d).",
 			req.Type, req.WantReply, len(req.Payload))
-		err := ci.ServeReq(ch, req)
+		err := ci.serveReq(ch, req)
 		if err != nil {
 			log.Error("%s", err.Error())
 			return
@@ -187,11 +188,11 @@ func (ci *ChanInfo) ServeReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	log.Debug("chan reqs end.")
 }
 
-func (ci *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
+func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 	log.Debug("new channel: %s (len: %d)",
 		newChan.ChannelType(), len(newChan.ExtraData()))
 
-	err = ci.onChanType(newChan.ChannelType(), newChan.ExtraData())
+	err = chi.onType(newChan.ChannelType(), newChan.ExtraData())
 	if err != nil {
 		return
 	}
@@ -213,10 +214,10 @@ func (ci *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 	}
 	log.Debug("accept channel ok.")
 
-	go ci.serveReqs(chin, outreqs)
-	go ci.serveReqs(chout, inreqs)
+	go chi.serveReqs(chin, outreqs)
+	go chi.serveReqs(chout, inreqs)
 
-	switch ci.Type {
+	switch chi.Type {
 	case "local", "remote":
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
@@ -224,25 +225,25 @@ func (ci *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "shell":
-		out, err := ci.prepareFile("out", "")
+		out, err := chi.prepareFile("out", "")
 		if err != nil {
 			return err
 		}
 		go MultiCopyClose(chin, chout)
 		go MultiCopyClose(chout, chin, out)
 	case "exec":
-		out, err := ci.prepareFile("out", strings.Join(ci.ExecCmds, "\r"))
+		out, err := chi.prepareFile("out", strings.Join(chi.ExecCmds, "\r"))
 		if err != nil {
 			return err
 		}
 		go MultiCopyClose(chin, chout)
 		go MultiCopyClose(chout, chin, out)
 	case "scpto":
-		go MultiCopyClose(chin, chout, CreateScpStream(ci))
+		go MultiCopyClose(chin, chout, CreateScpStream(chi))
 		go MultiCopyClose(chout, chin)
 	case "scpfrom":
 		go MultiCopyClose(chin, chout)
-		go MultiCopyClose(chout, chin, CreateScpStream(ci))
+		go MultiCopyClose(chout, chin, CreateScpStream(chi))
 	default:
 		// FIXME:
 	}
