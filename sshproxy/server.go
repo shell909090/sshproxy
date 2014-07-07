@@ -15,18 +15,16 @@ type ConnProcesser interface {
 }
 
 type Server struct {
-	db              *sql.DB
-	mu              sync.Mutex
-	cps             map[net.Addr]ConnProcesser
-	LogDir          string
-	logfiletransfer int
+	db     *sql.DB
+	mu     sync.Mutex
+	cps    map[net.Addr]ConnProcesser
+	LogDir string
 }
 
-func CreateServer(dbdriver, dbfile, logdir string, logfiletransfer int) (srv *Server, err error) {
+func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
 	srv = &Server{
-		cps:             make(map[net.Addr]ConnProcesser, 0),
-		LogDir:          logdir,
-		logfiletransfer: logfiletransfer,
+		cps:    make(map[net.Addr]ConnProcesser, 0),
+		LogDir: logdir,
 	}
 
 	srv.db, err = sql.Open(dbdriver, dbfile)

@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
+	"io"
 	"net"
+	"os"
+	"strings"
+	"sync"
 	"text/template"
 )
 
@@ -51,6 +55,47 @@ func genClientConfig(Account, PrivateKey, HostKey string) (config *ssh.ClientCon
 		HostKeyCallback: CheckHostKey(HostKey),
 	}
 	return
+}
+
+type ConnInfo struct {
+	srv *Server
+	wg  sync.WaitGroup
+
+	Username     string
+	Account      string
+	Hostid       int
+	Host         string
+	Hostname     string
+	Port         int
+	ProxyCommand string
+	ProxyAccount int
+	Hostkeys     string
+	RecordId     int64
+}
+
+func (srv *Server) createConnProcesser(username, account, host string) (cp ConnProcesser, err error) {
+	ci := &ConnInfo{
+		srv:      srv,
+		Username: username,
+		Account:  account,
+		Host:     host,
+	}
+
+	err = ci.loadHost()
+	if err != nil {
+		return
+	}
+
+	err = ci.insertRecord()
+	if err != nil {
+		return
+	}
+
+	return ci, nil
+}
+
+func (ci *ConnInfo) Close() (err error) {
+	return ci.updateEndtime()
 }
 
 func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
@@ -159,4 +204,72 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 	}
 
 	return cn, nil
+}
+
+func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
+	if req.Type == "tcpip-forward" {
+		fmt.Sprintf("%v", req.Payload)
+	}
+
+	r, b, err := conn.SendRequest(req.Type, req.WantReply, req.Payload)
+	if err != nil {
+		return err
+	}
+	log.Debug("send req ok: %s(result: %t)(payload: %d)", req.Type, r, len(b))
+
+	err = req.Reply(r, b)
+	if err != nil {
+		return err
+	}
+	log.Debug("reply req ok: %s(result: %t)", req.Type, r)
+	return
+}
+
+func (ci *ConnInfo) serveReqs(conn ssh.Conn, reqs <-chan *ssh.Request) (err error) {
+	defer ci.wg.Done()
+	log.Debug("reqs begin.")
+	for req := range reqs {
+		log.Debug("new req: %s(reply: %t, payload: %d).",
+			req.Type, req.WantReply, len(req.Payload))
+		err = ci.serveReq(conn, req)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return err
+		}
+	}
+	log.Debug("reqs end.")
+	return
+}
+
+func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err error) {
+	defer ci.wg.Done()
+	log.Debug("chans begin.")
+	for newChan := range chans {
+		chi := CreateChanInfo(ci)
+		err = chi.Serve(conn, newChan)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+	}
+	log.Debug("chans ends.")
+	return
+}
+
+func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) (err error) {
+	cliConn, cliChans, cliReqs, err := ci.clientBuilder()
+	if err != nil {
+		return
+	}
+	defer cliConn.Close()
+
+	log.Debug("handshake ok")
+
+	ci.wg.Add(4)
+	go ci.serveReqs(cliConn, srvReqs)
+	go ci.serveReqs(srvConn, cliReqs)
+	go ci.serveChans(cliConn, srvChans)
+	go ci.serveChans(srvConn, cliChans)
+	ci.wg.Wait()
+	return
 }

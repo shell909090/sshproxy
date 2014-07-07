@@ -22,7 +22,6 @@ type Config struct {
 	DBDriver           string
 	DBFile             string
 	LogDir             string
-	LogFileTransfer    int
 }
 
 func LoadConfig() (cfg Config, err error) {
@@ -84,7 +83,7 @@ func main() {
 		return
 	}
 
-	srv, err := sshproxy.CreateServer(cfg.DBDriver, cfg.DBFile, cfg.LogDir, cfg.LogFileTransfer)
+	srv, err := sshproxy.CreateServer(cfg.DBDriver, cfg.DBFile, cfg.LogDir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
