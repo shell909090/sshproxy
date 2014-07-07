@@ -3,6 +3,7 @@ package sshproxy
 import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
+	"database/sql"
 	"fmt"
 	"net"
 	"sync"
@@ -56,6 +57,7 @@ func genClientConfig(Account, PrivateKey, HostKey string) (config *ssh.ClientCon
 
 type ConnInfo struct {
 	srv *Server
+	db  *sql.DB
 	wg  sync.WaitGroup
 
 	Username     string
@@ -73,6 +75,7 @@ type ConnInfo struct {
 func (srv *Server) createConnProcesser(username, account, host string) (cp ConnProcesser, err error) {
 	ci := &ConnInfo{
 		srv:      srv,
+		db:       srv.db,
 		Username: username,
 		Account:  account,
 		Host:     host,
@@ -109,7 +112,7 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	case ci.ProxyAccount != 0:
 		log.Info("ssh proxy: %s:%d with accountid %d",
 			ci.Hostname, ci.Port, ci.ProxyAccount)
-		conn, err = ci.ConnAccount(ci.ProxyAccount, ci.Hostname, ci.Port)
+		conn, err = ci.connectProxy(ci.ProxyAccount, ci.Hostname, ci.Port)
 		if err != nil {
 			log.Error("ssh dial failed: %s", err.Error())
 			return
@@ -135,7 +138,56 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	return
 }
 
-func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (conn net.Conn, err error) {
+func (ci *ConnInfo) getNet(client *ssh.Client, cmd string) (pn *PipeNet, err error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return
+	}
+
+	pn = &PipeNet{
+		wa:   session,
+		c:    client,
+		name: "ssh",
+	}
+
+	pn.w, err = session.StdinPipe()
+	if err != nil {
+		return
+	}
+	pn.r, err = session.StdoutPipe()
+	if err != nil {
+		return
+	}
+
+	err = session.Start(cmd)
+	return
+}
+
+func (ci *ConnInfo) fmtCmd(desthost string, destport int) (cmd string, err error) {
+	if ci.ProxyCommand != "" {
+		tmpl, err := template.New("test").Parse(ci.ProxyCommand)
+		if err != nil {
+			return "", err
+		}
+
+		parameter := map[string]interface{}{
+			"host": desthost,
+			"port": destport,
+		}
+
+		buf := bytes.NewBuffer(nil)
+		err = tmpl.Execute(buf, parameter)
+		if err != nil {
+			return "", err
+		}
+		cmd = buf.String()
+	} else {
+		cmd = fmt.Sprintf("nc %s %d", desthost, destport)
+	}
+	return
+}
+
+func (ci *ConnInfo) connectProxy(accountid int, desthost string, destport int) (conn net.Conn, err error) {
 	account, keys, hostname, port, hostkeys, err := ci.getProxy(accountid)
 	if err != nil {
 		return
@@ -147,60 +199,20 @@ func (ci *ConnInfo) ConnAccount(accountid int, desthost string, destport int) (c
 		return
 	}
 
-	hostname = fmt.Sprintf("%s:%d", hostname, port)
-	client, err := ssh.Dial("tcp", hostname, config)
+	client, err := ssh.Dial("tcp",
+		fmt.Sprintf("%s:%d", hostname, port), config)
 	if err != nil {
 		return
 	}
 
-	session, err := client.NewSession()
+	cmd, err := ci.fmtCmd(desthost, destport)
 	if err != nil {
 		return
 	}
-
-	cn := &CmdNet{
-		w:    session,
-		c:    client,
-		name: "ssh",
-	}
-	cn.stdin, err = session.StdinPipe()
-	if err != nil {
-		return
-	}
-	cn.stdout, err = session.StdoutPipe()
-	if err != nil {
-		return
-	}
-
-	var cmd string
-	if ci.ProxyCommand != "" {
-		tmpl, err := template.New("test").Parse(ci.ProxyCommand)
-		if err != nil {
-			return nil, err
-		}
-
-		parameter := map[string]interface{}{
-			"host": desthost,
-			"port": destport,
-		}
-
-		buf := bytes.NewBuffer(nil)
-		err = tmpl.Execute(buf, parameter)
-		if err != nil {
-			return nil, err
-		}
-		cmd = buf.String()
-	} else {
-		cmd = fmt.Sprintf("nc %s %d", desthost, destport)
-	}
-
 	log.Debug("cmd: %s", cmd)
-	err = session.Start(cmd)
-	if err != nil {
-		return
-	}
 
-	return cn, nil
+	conn, err = ci.getNet(client, cmd)
+	return
 }
 
 func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {

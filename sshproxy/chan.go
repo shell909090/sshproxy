@@ -36,7 +36,7 @@ func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) 
 		return
 	}
 
-	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, cmd, "", 0)
+	chi.RecordLogsId, err = chi.insertRecordLogs(chi.Type, cmd, "", 0)
 	if err != nil {
 		return
 	}
@@ -46,16 +46,16 @@ func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) 
 	return
 }
 
-func (chi *ChanInfo) onTcpForward(direct, ip string, port uint32) (err error) {
+func (chi *ChanInfo) TcpForward(direct, ip string, port uint32) (err error) {
 	log.Notice("mapping %s port to %s:%d", direct, ip, port)
-	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, ip, "", int(port))
+	chi.RecordLogsId, err = chi.insertRecordLogs(chi.Type, ip, "", int(port))
 	return
 }
 
 func (chi *ChanInfo) FileTransmit(filename string, size int) (err error) {
 	log.Notice("%s with name: %s, size: %d, remote dir: %s",
 		chi.Type, filename, size, chi.RemoteDir)
-	chi.RecordLogsId, err = chi.ci.insertRecordLogs(chi.Type, filename, chi.RemoteDir, size)
+	chi.RecordLogsId, err = chi.insertRecordLogs(chi.Type, filename, chi.RemoteDir, size)
 	return
 }
 
@@ -127,7 +127,7 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 			return err
 		}
 
-		err = chi.onTcpForward("local", ip, port)
+		err = chi.TcpForward("local", ip, port)
 		if err != nil {
 			return err
 		}
@@ -139,7 +139,7 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 			return err
 		}
 
-		err = chi.onTcpForward("remote", ip, port)
+		err = chi.TcpForward("remote", ip, port)
 		if err != nil {
 			return err
 		}
