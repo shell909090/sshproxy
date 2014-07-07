@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>host managment</title>
+    <title>group managment</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,9 +14,7 @@
     <div class="container">
       % from bottle import request
       % session = request.environ.get('beaker.session')
-      % if 'hosts' in session['perms']:
-      <a href="/h/add">add</a>
-      % end
+      <a href="/grp/add">add</a>
       <form>
 	<input name="q" type="text"/>
 	<button class="btn" type="submit">query</button>
@@ -24,39 +22,36 @@
       <table class="table table-striped table-condensed">
         <thead>
 	  <tr>
-	    <td>host</td><td>accounts</td><td>hostname</td>
-	    <td>port</td><td>proxy</td><td>hostkey</td><td>actions</td>
+	    <td>name</td><td>users</td><td>accounts</td>
+	    <td>parent</td><td>perms</td><td>actions</td>
 	  </tr>
 	</thead>
 	<tbody>
-	  % for host in hosts:
+	  % for group in groups:
 	  <tr>
-	    % if 'hosts' in session['perms']:
-	    <td><a href="/h/{{host.id}}/edit">{{host.host}}</a></td>
-	    % else:
-	    <td>{{host.host}}</td>
-	    % end
-	    <td><a href="/acct/{{host.id}}">{{len(host.accounts)}}</a></td>
-	    <td>{{host.hostname}}</td>
-	    <td>{{host.port}}</td>
-	    % if host.proxy:
+	    <td><a href="/grp/{{group.id}}/edit">{{group.name}}</a></td>
 	    <td>
-	      <a href="/h/acct/{{host.proxy.id}}/edit">
-		{{'%s@%s' % (host.proxy.account, host.proxy.host.host)}}
+	      % for user in group.users:
+	      <a href="/usr/{{user.username}}/edit">
+	      {{user.username}}
 	      </a>
-	    </td>
-	    % else:
-	    <td></td>
-	    % end
-	    % if 'hosts' in session['perms']:
-	    <td><a href="/h/{{host.id}}/renew">{{'yes' if host.hostkeys else 'no'}}</a></td>
-	    % else:
-	    <td>{{'yes' if host.hostkeys else 'no'}}</td>
-	    % end
-	    <td>
-	      % if 'hosts' in session['perms']:
-	      <a href="/h/{{host.id}}/rem">del</a>
 	      % end
+	    </td>
+	    <td>
+	      % for account in group.accounts:
+	      <a href="/acct/{{account.id}}/edit">
+	      {{account.account}}@{{account.host.hostname}}:{{account.host.port}}
+	      </a>
+	      % end
+	    </td>
+	    <td>
+	      % if group.parent:
+	      <a href="/grp/{{group.parent.id}}/edit">{{group.parent.name}}</a>
+	      % end
+	    </td>
+	    <td>{{group.perms}}</td>
+	    <td>
+	      <a href="/grp/{{group.id}}/rem">del</a>
 	    </td>
 	  </tr>
 	  % end

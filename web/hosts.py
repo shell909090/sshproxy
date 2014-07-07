@@ -24,7 +24,7 @@ def _list(session):
                 Hosts.hostname.like('%'+q+'%')))
     hosts = hosts.order_by(Hosts.id)
     start, stop, page, pagemax = utils.paging(hosts)
-    return template(
+    return utils.paged_template(
         'hosts.html', page=page, pagemax=pagemax,
         hosts=hosts.slice(start, stop))
 

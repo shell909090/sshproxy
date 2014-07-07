@@ -38,7 +38,7 @@ application = SessionMiddleware(app, session_opts)
 def server_static(filename):
     return bottle.static_file(filename, root='static/')
 
-import users, hosts, records
+import users, hosts, groups, records
 
 def main():
     if '-h' in optdict:

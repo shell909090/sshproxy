@@ -13,13 +13,16 @@ from sqlalchemy.ext.declarative import declarative_base
 
 __all__ = ['Users', 'Pubkeys', 'Hosts', 'Accounts', 'Groups',
            'Records', 'RecordLogs', 'AuditLogs',
-           'ALLRULES', 'ALLPERMS', 'crypto_pass', 'check_pass',
+           'ALLRULES', 'PERMS', 'ALLPERMS', 'crypto_pass', 'check_pass',
            'or_']
 
 Base = declarative_base()
 
 ALLRULES = ['admin', 'users', 'hosts', 'groups', 'audit']
-ALLPERMS = ['shell', 'scpfrom', 'scpto', 'tcp', 'agent']
+PERMS = ['shell', 'scpfrom', 'scpto', 'tcp', 'agent']
+
+addx = lambda c: lambda x: [c+i for i in x]
+ALLPERMS = addx('+')(PERMS) + addx('-')(PERMS)
 
 def crypto_pass(p):
     return bcrypt.hashpw(p, bcrypt.gensalt())
@@ -63,12 +66,25 @@ class Accounts(Base):
     __table_args__ = (
         UniqueConstraint('account', 'hostid', name='account_host'),)
 
+user_group = Table(
+    'user_group', Base.metadata,
+    Column('users_username', String, ForeignKey('users.username')),
+    Column('groups_id', Integer, ForeignKey('groups.id')))
+
+account_group = Table(
+    'account_group', Base.metadata,
+    Column('accounts_id', Integer, ForeignKey('accounts.id')),
+    Column('groups_id', Integer, ForeignKey('groups.id')))
+
 class Groups(Base):
     __tablename__ = 'groups'
-    username = Column(String, ForeignKey('users.username'), primary_key=True)
-    account = Column(String, primary_key=True)
-    host = Column(String, ForeignKey('hosts.host'), primary_key=True)
-    perm = Column(String)
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    users = relationship("Users", secondary=user_group)
+    accounts = relationship("Accounts", secondary=account_group)
+    parentid = Column(Integer, ForeignKey('groups.id'))
+    parent = relationship('Groups', foreign_keys=[parentid,])
+    perms = Column(String)
 
 class Records(Base):
     __tablename__ = 'records'

@@ -89,9 +89,7 @@ def _add(session):
 def _edit(session, username):
     user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
-        return template(
-            'usr_edit.html', user=user,
-            errmsg="user not exist")
+        return 'user not exist.'
     return template('usr_edit.html', user=user)
 
 @route('/usr/<username>/edit', method="POST")
@@ -114,8 +112,9 @@ def _edit(session, username):
         utils.log(logger, 'change password of user %s.' % username)
 
     perms = set(request.forms.getall('perms')) & set(ALLRULES)
+    perms = ','.join(perms)
     utils.log(logger, 'change perm from %s to %s' % (user.perms, perms))
-    user.perms = ','.join(perms)
+    user.perms = perms
     sess.commit()
     return bottle.redirect('/usr/')
 

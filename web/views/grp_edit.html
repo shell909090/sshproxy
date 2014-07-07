@@ -1,0 +1,42 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>group managment</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="shell">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/bootstrap-responsive.min.css" />
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css" />
+  </head>
+  <body>
+    % include("nav.html")
+    <div class="container">
+      % from db import PERMS
+      <form method="POST">
+	<table>
+	  % perms = set(group.perms.split(','))
+	  % if defined('errmsg'):
+	  <h2>{{errmsg}}</h2>
+	  % end
+	  <h2>name of group</h2>
+	  <input name="name" type="text" value="{{group.name if group.name else ''}}"/>
+	  <h2>perms</h2>
+	  % for p in PERMS:
+	  <label>
+          <label class="checkbox">
+	    <input type="checkbox" name="perms" {{'checked="yes"' if '+'+p in perms else ''}} value="+{{p}}"/>+{{p}}
+	  </label>
+          <label class="checkbox">
+	    <input type="checkbox" name="perms" {{'checked="yes"' if '-'+p in perms else ''}} value="-{{p}}"/>-{{p}}
+	  </label>
+	  </label>
+	  % end
+          <button class="btn btn-primary" type="submit">Submit</button>
+	</table>
+      </form>
+    </div>
+    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
+    <script src="/static/js/bootstrap.min.js"></script>
+  </body>
+</html>

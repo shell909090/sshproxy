@@ -56,6 +56,8 @@ def _list(session):
         except Exception, e:
             return str(e)
     recs = recs.order_by(Records.starttime)
+    utils.log(logger, 'view record list.')
+    sess.commit()
     start, stop, page, pagemax = utils.paging(recs)
     return template(
         'recs.html', page=page, pagemax=pagemax,
@@ -65,7 +67,12 @@ def _list(session):
 @utils.chklogin('audit')
 def _show(session, id):
     rec = sess.query(Records).filter_by(id=id).scalar()
+    if not rec:
+        return 'rec not exist.'
     reclogs = sess.query(RecordLogs).filter_by(recordid=id).order_by(RecordLogs.time)
+    utils.log(logger, 'view record log list id: %d, start: %d, dest: %s@%s.' % (
+        rec.id, rec.starttime.strftime('%Y%m%d %H:%M:%S'), rec.account, rec.host))
+    sess.commit()
     start, stop, page, pagemax = utils.paging(reclogs)
     return template(
         'rec.html', page=page, pagemax=pagemax,
@@ -74,11 +81,16 @@ def _show(session, id):
 @route('/rlog/<id:int>')
 @utils.chklogin('audit')
 def _show(session, id):
-    rec = sess.query(Records).filter_by(id=id).scalar()
+    reclog = sess.query(RecordLogs).filter_by(id=id).scalar()
+    if not reclog:
+        yield 'reclog not exist.'
+        return
     filepath = path.join(
         app.config.get('file.basedir'),
-        rec.starttime.strftime('%Y%m%d'),
-        '%d.out' % rec.id)
+        rec.starttime.strftime('%Y%m%d'), '%d.out' % rec.id)
+    utils.log(logger, 'view sess id: %d, start: %d.' % (
+        reclog.id, reclog.time.strftime('%Y%m%d %H:%M:%S')))
+    sess.commit()
     with open(filepath, 'rb') as fi:
         d = fi.read(1024)
         while d:
@@ -86,9 +98,18 @@ def _show(session, id):
             d = fi.read(1024)
 
 @route('/adt/')
-def _list():
-    pass
+@utils.chklogin('audit')
+def _list(session):
+    audits = sess.query(AuditLogs)
+    audits = audits.order_by(AuditLogs.id)
+    utils.log(logger, 'view audit list.')
+    sess.commit()
+    start, stop, page, pagemax = utils.paging(audits)
+    return template(
+        'adts.html', page=page, pagemax=pagemax,
+        audits=audits.slice(start, stop))
 
-@route('/adt/<adt:int>')
-def _show(audit):
-    pass
+# @route('/adt/<adt:int>')
+# @utils.chklogin('audit')
+# def _show(audit):
+#     pass
