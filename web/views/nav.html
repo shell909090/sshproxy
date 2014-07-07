@@ -1,3 +1,5 @@
+    % from bottle import request
+    % session = request.environ.get('beaker.session')
     <div class="navbar navbar-fixed-top">
       <div class="navbar-inner">
         <div class="container">
@@ -10,10 +12,16 @@
             <ul class="nav navbar-nav">
               <li><a href="/">Home</a></li>
               <li><a href="/h/">Hosts</a></li>
+	      % if 'users' in session['perms']:
               <li><a href="/usr/">Users</a></li>
+	      % end
+	      % if 'groups' in session['perms']:
               <li><a href="/grp/">Groups</a></li>
+	      % end
+	      % if 'audit' in session['perms']:
               <li><a href="/rec/">Records</a></li>
               <li><a href="/adt/">AuditLogs</a></li>
+	      % end
 	      <li class="dropdown">
 		<a href="#" class="dropdown-toggle" data-toggle="dropdown">My Account<span class="caret"></span></a>
 		<ul class="dropdown-menu" role="menu">

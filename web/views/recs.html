@@ -11,30 +11,52 @@
   </head>
   <body>
     % include("nav.html")
-    <div class="container">
-      <form>
-	<input name="q" type="text"/>
-	<button class="btn" type="submit">query</button>
-      </form>
-      <table class="table table-striped table-condensed">
-        <thead>
-	  <tr>
-	    <td>username</td><td>host</td><td>time</td>
-	  </tr>
-	</thead>
-	<tbody>
-	  % for rec in recs:
-	  <tr>
-	    <td>{{rec.username}}</td>
-	    <td>{{rec.account}}@{{rec.host}}</td>
-	    <td><a href="/rec/{{rec.id}}">{{rec.starttime}}</a></td>
-	  </tr>
-	  % end
-	</tbody>
-      </table>
-      % include("page.html", page=page, pagemax=pagemax)
+    <div class="container-fluid">
+      <div class="span5">
+	<form>
+	  <input name="q" type="text"/>
+	  <button class="btn" type="submit">query</button>
+	</form>
+	<table class="table table-striped table-condensed">
+          <thead>
+	    <tr class="record">
+	      <td>starttime</td><td>endtime</td><td>username</td><td>host</td>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    % for rec in recs:
+	    <tr class="record" link="/rec/{{rec.id}}">
+	      <td>{{rec.starttime}}</td>
+	      <td>{{rec.endtime}}</td>
+	      <td>{{rec.username}}</td>
+	      <td>{{rec.account}}@{{rec.host}}</td>
+	    </tr>
+	    % end
+	  </tbody>
+	</table>
+	% include("page.html", page=page, pagemax=pagemax)
+      </div>
+      <div class="span9 recordlogs">
+      </div>
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>
+    <script>
+    $(document).ready(function () {
+	$(".record").click(function () {
+	    $(".recordlogs").html('');
+	    if ($(this).attr('link')) {
+		$.ajax({
+		    url: $(this).attr('link'),
+		    cache: false,
+		    dataType: 'html',
+		    success: function(data){
+			$(".recordlogs").html(data);
+		    },
+		});
+	    }
+	});
+    });
+    </script>
   </body>
 </html>

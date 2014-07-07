@@ -17,7 +17,7 @@ sess = app.config['db.session']
 @utils.chklogin('groups')
 def _list(session):
     groups = sess.query(Groups).order_by(Groups.id)
-    return paged_template('grp.html', _groups=groups)
+    return utils.paged_template('grp.html', _groups=groups)
 
 @route('/grp/add')
 @utils.chklogin('groups')

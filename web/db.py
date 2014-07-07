@@ -6,7 +6,7 @@
 '''
 import os, sys
 import bcrypt, sqlalchemy
-from sqlalchemy import or_, Table, Column, Integer, String
+from sqlalchemy import desc, or_, Table, Column, Integer, String
 from sqlalchemy import DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,7 +14,7 @@ from sqlalchemy.ext.declarative import declarative_base
 __all__ = ['Users', 'Pubkeys', 'Hosts', 'Accounts', 'Groups',
            'Records', 'RecordLogs', 'AuditLogs',
            'ALLRULES', 'PERMS', 'ALLPERMS', 'crypto_pass', 'check_pass',
-           'or_']
+           'sqlalchemy', 'desc', 'or_']
 
 Base = declarative_base()
 
@@ -99,6 +99,7 @@ class RecordLogs(Base):
     __tablename__ = 'recordlogs'
     id = Column(Integer, primary_key=True)
     recordid = Column(Integer, ForeignKey('records.id'))
+    rec = relationship('Records')
     time = Column(DateTime, nullable=False, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
     type = Column(Integer, nullable=False)
     log1 = Column(String)

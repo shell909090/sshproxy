@@ -48,10 +48,7 @@ def _list(session):
     if q:
         users = users.filter(Users.username.like('%'+q+'%'))
     users = users.order_by(Users.username)
-    start, stop, page, pagemax = utils.paging(users)
-    return template(
-        'usr.html', page=page, pagemax=pagemax,
-        users=users.slice(start, stop))
+    return utils.paged_template('usr.html', _users=users)
 
 @route('/usr/add')
 @utils.chklogin('users')
@@ -113,7 +110,8 @@ def _edit(session, username):
 
     perms = set(request.forms.getall('perms')) & set(ALLRULES)
     perms = ','.join(perms)
-    utils.log(logger, 'change perm from %s to %s' % (user.perms, perms))
+    utils.log(logger, 'change perm from %s to %s for user %s' % (
+            user.perms, perms, user.username))
     user.perms = perms
     sess.commit()
     return bottle.redirect('/usr/')
@@ -151,7 +149,8 @@ def _edit(session):
         utils.log(logger, 'change password of user %s.' % session['username'])
 
     perms = set(request.forms.getall('perms')) & set(ALLRULES)
-    utils.log(logger, 'change perm from %s to %s' % (user.perms, perms))
+    utils.log(logger, 'change perm from %s to %s for user %s' % (
+            user.perms, perms, user.username))
     user.perms = ','.join(perms)
     sess.commit()
     return bottle.redirect('/usr/')

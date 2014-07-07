@@ -55,13 +55,10 @@ def _list(session):
         try: recs = adv_query(recs, q)
         except Exception, e:
             return str(e)
-    recs = recs.order_by(Records.starttime)
+    recs = recs.order_by(desc(Records.starttime))
     utils.log(logger, 'view record list.')
     sess.commit()
-    start, stop, page, pagemax = utils.paging(recs)
-    return template(
-        'recs.html', page=page, pagemax=pagemax,
-        recs=recs.slice(start, stop))
+    return utils.paged_template('recs.html', _recs=recs)
 
 @route('/rec/<id:int>')
 @utils.chklogin('audit')
@@ -70,13 +67,10 @@ def _show(session, id):
     if not rec:
         return 'rec not exist.'
     reclogs = sess.query(RecordLogs).filter_by(recordid=id).order_by(RecordLogs.time)
-    utils.log(logger, 'view record log list id: %d, start: %d, dest: %s@%s.' % (
+    utils.log(logger, 'view record log list id: %d, start: %s, dest: %s@%s.' % (
         rec.id, rec.starttime.strftime('%Y%m%d %H:%M:%S'), rec.account, rec.host))
     sess.commit()
-    start, stop, page, pagemax = utils.paging(reclogs)
-    return template(
-        'rec.html', page=page, pagemax=pagemax,
-        rec=rec, reclogs=reclogs.slice(start, stop))
+    return utils.paged_template('rec.html', _reclogs=reclogs)
 
 @route('/rlog/<id:int>')
 @utils.chklogin('audit')
@@ -87,8 +81,8 @@ def _show(session, id):
         return
     filepath = path.join(
         app.config.get('file.basedir'),
-        rec.starttime.strftime('%Y%m%d'), '%d.out' % rec.id)
-    utils.log(logger, 'view sess id: %d, start: %d.' % (
+        reclog.rec.starttime.strftime('%Y%m%d'), '%d.out' % reclog.id)
+    utils.log(logger, 'view sess id: %d, start: %s.' % (
         reclog.id, reclog.time.strftime('%Y%m%d %H:%M:%S')))
     sess.commit()
     with open(filepath, 'rb') as fi:
@@ -101,13 +95,10 @@ def _show(session, id):
 @utils.chklogin('audit')
 def _list(session):
     audits = sess.query(AuditLogs)
-    audits = audits.order_by(AuditLogs.id)
+    audits = audits.order_by(desc(AuditLogs.id))
     utils.log(logger, 'view audit list.')
     sess.commit()
-    start, stop, page, pagemax = utils.paging(audits)
-    return template(
-        'adts.html', page=page, pagemax=pagemax,
-        audits=audits.slice(start, stop))
+    return utils.paged_template('adts.html', _audits=audits)
 
 # @route('/adt/<adt:int>')
 # @utils.chklogin('audit')

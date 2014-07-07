@@ -6,7 +6,7 @@
 '''
 import os, sys, logging
 import bottle
-from bottle import request, redirect
+from bottle import request, template, redirect
 from db import *
 
 app = bottle.default_app()

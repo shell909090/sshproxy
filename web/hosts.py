@@ -23,10 +23,7 @@ def _list(session):
                 Hosts.host.like('%'+q+'%'),
                 Hosts.hostname.like('%'+q+'%')))
     hosts = hosts.order_by(Hosts.id)
-    start, stop, page, pagemax = utils.paging(hosts)
-    return utils.paged_template(
-        'hosts.html', page=page, pagemax=pagemax,
-        hosts=hosts.slice(start, stop))
+    return utils.paged_template('hosts.html', _hosts=hosts)
 
 @route('/h/add')
 @utils.chklogin('hosts')
