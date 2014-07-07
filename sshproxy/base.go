@@ -14,7 +14,7 @@ var (
 	ErrChanTypeNotSupported = errors.New("channel type not support")
 	ErrIllegalUserName      = errors.New("illegal username")
 	ErrIllegalPubkey        = errors.New("illegal pubkey")
-	ErrCPNotFound           = errors.New("conn processer not found")
+	ErrSCSNotFound          = errors.New("ssh conn server not found")
 	ErrHostKey              = errors.New("host key not match")
 	ErrDataBase             = errors.New("database error")
 )

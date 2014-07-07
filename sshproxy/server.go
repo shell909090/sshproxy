@@ -9,21 +9,20 @@ import (
 	"sync"
 )
 
-type ConnProcesser interface {
-	Close() error
+type SshConnServer interface {
 	Serve(ssh.ServerConn, <-chan ssh.NewChannel, <-chan *ssh.Request) error
 }
 
 type Server struct {
 	db     *sql.DB
 	mu     sync.Mutex
-	cps    map[net.Addr]ConnProcesser
+	scss   map[net.Addr]SshConnServer
 	LogDir string
 }
 
 func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
 	srv = &Server{
-		cps:    make(map[net.Addr]ConnProcesser, 0),
+		scss:   make(map[net.Addr]SshConnServer, 0),
 		LogDir: logdir,
 	}
 
@@ -35,15 +34,15 @@ func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
 	return
 }
 
-func (srv *Server) getConnInfo(remote net.Addr) (cp ConnProcesser, err error) {
+func (srv *Server) getConnInfo(remote net.Addr) (scs SshConnServer, err error) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 
 	// get RemoteAddr from ServerConn, and get user and host from AuthUser
-	cp, ok := srv.cps[remote]
+	scs, ok := srv.scss[remote]
 	if !ok {
-		fmt.Printf("%v", srv.cps, remote)
-		return nil, ErrCPNotFound
+		fmt.Printf("%v", srv.scss, remote)
+		return nil, ErrSCSNotFound
 	}
 	return
 }
@@ -52,27 +51,24 @@ func (srv *Server) serveConn(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChan
 	defer srvConn.Close()
 
 	remote := srvConn.RemoteAddr()
-	cp, err := srv.getConnInfo(remote)
+	scs, err := srv.getConnInfo(remote)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
 	defer srv.closeConn(remote)
-	defer cp.Close()
 
-	err = cp.Serve(srvConn, srvChans, srvReqs)
+	err = scs.Serve(srvConn, srvChans, srvReqs)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
-
-	log.Info("Connect closed.")
 }
 
 func (srv *Server) closeConn(remote net.Addr) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	delete(srv.cps, remote)
+	delete(srv.scss, remote)
 }
 
 func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh.Permissions, err error) {
@@ -106,7 +102,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 		return
 	}
 
-	cp, err := srv.createConnProcesser(username, account, host)
+	scs, err := srv.createSshConnServer(username, account, host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
@@ -115,7 +111,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	// set user and host in meta.RemoteAddr
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	srv.cps[remote] = cp
+	srv.scss[remote] = scs
 	return
 }
 

@@ -72,7 +72,7 @@ type ConnInfo struct {
 	RecordId     int64
 }
 
-func (srv *Server) createConnProcesser(username, account, host string) (cp ConnProcesser, err error) {
+func (srv *Server) createSshConnServer(username, account, host string) (scs SshConnServer, err error) {
 	ci := &ConnInfo{
 		srv:      srv,
 		db:       srv.db,
@@ -92,10 +92,6 @@ func (srv *Server) createConnProcesser(username, account, host string) (cp ConnP
 	}
 
 	return ci, nil
-}
-
-func (ci *ConnInfo) Close() (err error) {
-	return ci.updateEndtime()
 }
 
 func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
@@ -253,6 +249,7 @@ func (ci *ConnInfo) serveReqs(conn ssh.Conn, reqs <-chan *ssh.Request) (err erro
 
 func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err error) {
 	defer ci.wg.Done()
+	defer conn.Close()
 	log.Debug("chans begin.")
 	for newChan := range chans {
 		chi := CreateChanInfo(ci)
@@ -281,5 +278,7 @@ func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel
 	go ci.serveChans(cliConn, srvChans)
 	go ci.serveChans(srvConn, cliChans)
 	ci.wg.Wait()
-	return
+
+	log.Info("Connect closed.")
+	return ci.updateEndtime()
 }

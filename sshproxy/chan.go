@@ -11,6 +11,7 @@ import (
 type ChanInfo struct {
 	ci           *ConnInfo
 	RecordLogsId int64
+	ch           chan int
 	Type         string
 	RemoteDir    string
 	ExecCmds     []string
@@ -19,6 +20,7 @@ type ChanInfo struct {
 func CreateChanInfo(ci *ConnInfo) (chi *ChanInfo) {
 	chi = &ChanInfo{
 		ci:   ci,
+		ch:   make(chan int, 1),
 		Type: "unknown",
 	}
 	return chi
@@ -91,15 +93,18 @@ func (chi *ChanInfo) onReq(req *ssh.Request) (err error) {
 			case "-f":
 				chi.Type = "scpfrom"
 			}
+			chi.ch <- 1
 			chi.RemoteDir = cmds[len(cmds)-1]
 			log.Info("session in %s mode, remote dir: %s.",
 				chi.Type, chi.RemoteDir)
 		default:
 			chi.Type = "exec"
+			chi.ch <- 1
 			chi.ExecCmds = append(chi.ExecCmds, strs[0])
 		}
 	case "shell":
 		chi.Type = "shell"
+		chi.ch <- 1
 		log.Info("session in shell mode")
 	case "x11-req":
 		strs, err = ReadPayloads(req.Payload[1:])
@@ -121,6 +126,7 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 	case "session":
 	case "direct-tcpip":
 		chi.Type = "local"
+		chi.ch <- 1
 
 		ip, port, _, _, err := getTcpInfo(extra)
 		if err != nil {
@@ -133,6 +139,7 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 		}
 	case "forwarded-tcpip":
 		chi.Type = "remote"
+		chi.ch <- 1
 
 		ip, port, _, _, err := getTcpInfo(extra)
 		if err != nil {
@@ -145,6 +152,7 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 		}
 	case "auth-agent@openssh.com":
 		chi.Type = "sshagent"
+		chi.ch <- 1
 	default:
 		log.Error("channel type %s not supported.", chantype)
 		err = ErrChanTypeNotSupported
@@ -189,7 +197,7 @@ func (ci *ChanInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 }
 
 func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
-	log.Debug("new channel: %s (len: %d)",
+	log.Info("new channel: %s (len: %d)",
 		newChan.ChannelType(), len(newChan.ExtraData()))
 
 	err = chi.onType(newChan.ChannelType(), newChan.ExtraData())
@@ -216,6 +224,8 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 
 	go chi.serveReqs(chin, outreqs)
 	go chi.serveReqs(chout, inreqs)
+
+	<-chi.ch
 
 	switch chi.Type {
 	case "local", "remote":
@@ -246,6 +256,7 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 		go MultiCopyClose(chout, chin, CreateScpStream(chi))
 	default:
 		// FIXME:
+		log.Warning("redirect before setup")
 	}
 	return
 }
