@@ -79,11 +79,11 @@ account_group = Table(
 class Groups(Base):
     __tablename__ = 'groups'
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String, index=True, unique=True)
     users = relationship("Users", secondary=user_group)
     accounts = relationship("Accounts", secondary=account_group)
     parentid = Column(Integer, ForeignKey('groups.id'))
-    parent = relationship('Groups', foreign_keys=[parentid,])
+    parent = relationship('Groups', foreign_keys=[parentid,], uselist=False)
     perms = Column(String)
 
 class Records(Base):

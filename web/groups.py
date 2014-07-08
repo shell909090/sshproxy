@@ -57,12 +57,91 @@ def _edit(session, id):
     if not group:
         return 'group not exist.'
 
+    parent = sess.query(Groups).filter_by(name=request.forms.parent).scalar()
+    if not parent:
+        return 'parent not exist.'
+    u = parent
+    while u:
+        if u == group:
+            return template(
+                'grp_edit.html', group=group,
+                errmsg='Oops, parent looped.')
+        u = u.parent
+
+    group.name = request.forms.name
+
     perms = set(request.forms.getall('perms')) & set(ALLPERMS)
     perms = ','.join(perms)
-    utils.log(logger, 'change group name %s => %s, perms: %s => %s' % (
-        group.name, name, group.perms, perms))
-    group.name = name
     group.perms = perms
+
+    group.parent = parent
+
+    utils.log(logger, 'change group name %s => %s, perms: %s => %s, parent: %s' % (
+        group.name, request.forms.name, group.perms, perms, request.forms.parent))
+    sess.commit()
+    return bottle.redirect('/grp/')
+
+@route('/grp/<id:int>/usrs')
+@utils.chklogin('groups')
+def _associated(session, id):
+    group = sess.query(Groups).filter_by(id=id).scalar()
+    if not group:
+        return 'group not exist.'
+    grpusrs = set([u.username for u in group.users])
+
+    if 'selected' not in session:
+        session['selected'] = grpusrs
+        return bottle.redirect('/usr/select?next=/grp/%d/usrs' % id)
+    usernames = set(session.pop('selected'))
+
+    for u in grpusrs - usernames:
+        user = sess.query(Users).filter_by(username=u).scalar()
+        if not user:
+            sess.rollback()
+            return 'some user dont exist.'
+        group.users.remove(user)
+
+    for u in usernames - grpusrs:
+        user = sess.query(Users).filter_by(username=u).scalar()
+        if not user:
+            sess.rollback()
+            return 'some user dont exist.'
+        group.users.append(user)
+
+    utils.log(logger, 'associated users to group %s(%d): %s' % (
+        group.name, group.id, ','.join(usernames)))
+    sess.commit()
+    return bottle.redirect('/grp/')
+
+@route('/grp/<id:int>/accts')
+@utils.chklogin('groups')
+def _associated(session, id):
+    group = sess.query(Groups).filter_by(id=id).scalar()
+    if not group:
+        return 'group not exist.'
+    grpaccts = set([a.id for a in group.accounts])
+
+    if 'selected' not in session:
+        session['selected'] = grpaccts
+        return bottle.redirect('/acct/select?next=/grp/%d/accts' % id)
+    accounts = set(session.pop('selected'))
+
+    for id in grpaccts - accounts:
+        acct = sess.query(Accounts).filter_by(id=id).scalar()
+        if not acct:
+            sess.rollback()
+            return 'some account dont exist.'
+        group.accounts.remove(acct)
+
+    for id in accounts - grpaccts:
+        acct = sess.query(Accounts).filter_by(id=id).scalar()
+        if not acct:
+            sess.rollback()
+            return 'some account dont exist.'
+        group.accounts.append(acct)
+
+    utils.log(logger, 'associated account to group %s(%d): %s' % (
+        group.name, group.id, ','.join([str(id) for id in accounts])))
     sess.commit()
     return bottle.redirect('/grp/')
 
@@ -74,6 +153,6 @@ def _remove(session, id):
         return 'group not exist.'
 
     utils.log(logger, 'del group: %d %s' % (group.id, group.name))
-    sess.delete(acct)
+    sess.delete(group)
     sess.commit()
     return bottle.redirect('/grp/')

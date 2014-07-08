@@ -50,6 +50,20 @@ def _list(session):
     users = users.order_by(Users.username)
     return utils.paged_template('usr.html', _users=users)
 
+@route('/usr/select')
+@utils.chklogin('users')
+def _select(session):
+    usernames = session.pop('selected')
+    users = sess.query(Users).order_by(Users.username)
+    return utils.paged_template('usr.html', _users=users, selected=set(usernames))
+
+@route('/usr/select', method='POST')
+@utils.chklogin('users')
+def _select(session):
+    usernames = request.forms.getall('users')
+    session['selected'] = usernames
+    return bottle.redirect(request.query.next or '/')
+
 @route('/usr/add')
 @utils.chklogin('users')
 def _add(session):

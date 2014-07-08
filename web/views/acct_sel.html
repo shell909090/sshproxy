@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>user managment</title>
+    <title>select accounts</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,51 +13,30 @@
     % include("nav.html")
     <div class="container">
       % from bottle import request
-      % if not defined('selected'):
-      <a href="/usr/add">add</a>
-      <form>
-	<input name="q" type="text"/>
-	<button class="btn" type="submit">query</button>
-      </form>
-      % end
-      % if defined('selected'):
+      % session = request.environ.get('beaker.session')
       <form method="POST">
-      % end
 	<table class="table table-striped table-condensed">
           <thead>
 	    <tr>
-	      % if defined('selected'):
-	      <td>select</td>
-	      % end
-	      <td>name</td><td>pubkeys</td><td>perms</td>
-	      % if not defined('selected'):
-	      <td>actions</td>
-	      % end
+	      <td>host</td><td>accounts</td>
 	    </tr>
 	  </thead>
 	  <tbody>
-	    % for user in users:
+	    % for host in hosts:
 	    <tr>
-	      % if defined('selected'):
-	      <td><input type="checkbox" name="users" {{'checked="yes"' if user.username in selected else ''}} value="{{user.username}}"/></td>
-	      % end
-	      <td><a href="/usr/{{user.username}}/edit">{{user.username}}</a></td>
-	      <td>{{len(user.pubkeys)}}</td>
-	      <td>{{user.perms}}</td>
-	      % if not defined('selected'):
+	      <td>{{host.host}}</td>
 	      <td>
-		<a href="/usr/{{user.username}}/rem">del</a>
+		% for acct in host.accounts:
+		<input type="checkbox" name="accts" {{'checked="yes"' if acct.id in selected else ''}} value="{{acct.id}}"/>{{acct.account}}
+		% end
 	      </td>
-	      % end
 	    </tr>
 	    % end
 	  </tbody>
 	</table>
 	% include("page.html", page=page, pagemax=pagemax)
-      % if defined('selected'):
         <button class="btn btn-primary" type="submit">Submit</button>
       </form>
-      % end
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>

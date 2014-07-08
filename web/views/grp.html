@@ -36,6 +36,7 @@
 	      {{user.username}}
 	      </a>
 	      % end
+	      [<a href="/grp/{{group.id}}/usrs">edit</a>]
 	    </td>
 	    <td>
 	      % for account in group.accounts:
@@ -43,6 +44,7 @@
 	      {{account.account}}@{{account.host.hostname}}:{{account.host.port}}
 	      </a>
 	      % end
+	      [<a href="/grp/{{group.id}}/accts">edit</a>]
 	    </td>
 	    <td>
 	      % if group.parent:

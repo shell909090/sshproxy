@@ -21,6 +21,8 @@
 	  % end
 	  <h2>name of group</h2>
 	  <input name="name" type="text" value="{{group.name if group.name else ''}}"/>
+	  <h2>name of parent</h2>
+	  <input name="parent" type="text" value="{{group.parent.name if group.parent else ''}}"/>
 	  <h2>perms</h2>
 	  % for p in PERMS:
 	  <label>
