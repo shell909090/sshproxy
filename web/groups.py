@@ -156,3 +156,13 @@ def _remove(session, id):
     sess.delete(group)
     sess.commit()
     return bottle.redirect('/grp/')
+
+@route('/grp/cal')
+@utils.chklogin('groups')
+def _calculus(session):
+    pass
+
+@route('/grp/cal', method='POST')
+@utils.chklogin('groups')
+def _calculus(session):
+    pass

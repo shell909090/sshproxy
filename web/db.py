@@ -62,7 +62,8 @@ class Accounts(Base):
     account = Column(String, index=True, nullable=False)
     hostid = Column(Integer, ForeignKey("hosts.id"))
     host = relationship("Hosts", backref='accounts', foreign_keys=[hostid,])
-    key = Column(String, nullable=False)
+    key = Column(String)
+    password = Column(String)
     __table_args__ = (
         UniqueConstraint('account', 'hostid', name='account_host'),)
 
