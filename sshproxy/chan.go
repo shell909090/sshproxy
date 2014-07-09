@@ -26,11 +26,6 @@ func CreateChanInfo(ci *ConnInfo) (chi *ChanInfo) {
 	return chi
 }
 
-// func (chi *ChanInfo) Close() (err error) {
-// 	close(chi.ch)
-// 	return
-// }
-
 func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
 	starttime, err := chi.ci.getStarttime()
 	if err != nil {

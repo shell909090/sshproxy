@@ -122,35 +122,6 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 	return ci, nil
 }
 
-func (ci *ConnInfo) loadPerms() (err error) {
-	v := url.Values{}
-	v.Add("username", ci.Username)
-	v.Add("account", ci.Account)
-	v.Add("host", ci.Host)
-
-	url := fmt.Sprintf("http://localhost:8080/perms?%s", v.Encode())
-	log.Info("access %s", url)
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Error("query perms failed: %s", err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error("query perms failed: %s", err.Error())
-		return
-	}
-
-	perms := strings.Split(string(b), ",")
-	log.Info("query perms: %s / %s@%s => %s.", ci.Username, ci.Account, ci.Host, string(b))
-	for _, p := range perms {
-		ci.Perms[p] = 1
-	}
-	return
-}
-
 func (ci *ConnInfo) ChkPerm(name string) (ok bool) {
 	_, ok = ci.Perms[name]
 	return
