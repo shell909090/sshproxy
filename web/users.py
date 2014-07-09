@@ -186,6 +186,14 @@ def _list(session):
     pubkeys = sess.query(Pubkeys).filter_by(username=session['username'])
     return template('pubk.html', pubkeys=pubkeys)
 
+@route('/pubk/query')
+@utils.chklocal
+def _query():
+    pubk = sess.query(Pubkeys).filter_by(pubkey=request.query.pubkey).scalar()
+    if not pubk:
+        return {'errmsg': 'pubkey not exist.'}
+    return {'name': pubk.name, 'username': pubk.username}
+
 @route('/pubk/add')
 @utils.chklogin()
 def _add(session):

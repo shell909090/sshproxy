@@ -60,6 +60,34 @@ def _list(session):
     sess.commit()
     return utils.paged_template('recs.html', _recs=recs)
 
+@route('/rec/add')
+@utils.chklocal
+@utils.jsonenc
+def _add():
+    username = request.query.get('username')
+    account = request.query.get('account')
+    host = request.query.get('host')
+    if not (username and account and host):
+        return {'errmsg': 'username or account or host is empty.'}
+    rec = Records(username=username, account=account, host=host)
+    sess.add(rec)
+    sess.commit()
+    return {'recordid': rec.id, 'starttime': rec.starttime.isoformat()}
+
+@route('/rec/end')
+@utils.chklocal
+@utils.jsonenc
+def _end():
+    recordid = request.query.get('recordid')
+    if not id:
+        return {'errmsg': 'recordid empty'}
+    rec = sess.query(Records).filter_by(id=recordid).scalar()
+    if not rec:
+        return {'errmsg': 'rec not exist.'}
+    rec.endtime
+    sess.commit()
+    return
+
 @route('/rec/<id:int>')
 @utils.chklogin('audit')
 def _show(session, id):
@@ -90,6 +118,23 @@ def _show(session, id):
         while d:
             yield d
             d = fi.read(1024)
+
+@route('/rlog/add')
+@utils.chklocal
+@utils.jsonenc
+def _add():
+    recordid = request.query.get('recordid')
+    if not recordid:
+        return {'errmsg': 'recordid empty'}
+    rlog = RecordLogs(
+        recordid=recordid,
+        type=request.query.get('type'),
+        log1=request.query.get('log1'),
+        log2=request.query.get('log2'),
+        num1=request.query.get('num1'))
+    sess.add(rlog)
+    sess.commit()
+    return {'id': rlog.id}
 
 @route('/adt/')
 @utils.chklogin('audit')

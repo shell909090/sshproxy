@@ -25,6 +25,37 @@ def _list(session):
     hosts = hosts.order_by(Hosts.id)
     return utils.paged_template('hosts.html', _hosts=hosts)
 
+def acct_dict(acct):
+    return {'hostid': acct.host.id, 'hostname': acct.host.hostname,
+            'port': acct.host.port, 'hostkey': acct.host.hostkeys,
+            'accountid': acct.id, 'account': acct.account,
+            'key': acct.key, 'password': acct.password}
+
+@route('/h/query')
+@utils.chklocal
+@utils.jsonenc
+def _query():
+    username = request.query.get('username')
+    account = request.query.get('account')
+    host = request.query.get('host')
+    if not (username and account and host):
+        return {'errmsg': 'username or account or host is empty.'}
+
+    user = sess.query(Users).filter_by(username=username).scalar()
+    if not user:
+        return {'errmsg': 'user not exist.'}
+    acct = sess.query(Accounts).filter_by(account=account).\
+        join(Accounts.host).filter_by(host=host).scalar()
+    if not acct:
+        return {'errmsg': 'account not exist.'}
+
+    r = acct_dict(acct)
+    r['perms'] = cal_group(user, acct)
+    if acct.host.proxy:
+        r['proxy'] = acct_dict(acct.host.proxy)
+        r['proxycommand'] = acct.host.proxycommand
+    return r
+
 @route('/h/add')
 @utils.chklogin('hosts')
 def _add(session):

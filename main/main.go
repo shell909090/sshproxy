@@ -17,11 +17,7 @@ type Config struct {
 	Logfile  string
 	Loglevel string
 
-	HostPrivateKeyFile string
-	Listen             string
-	DBDriver           string
-	DBFile             string
-	LogDir             string
+	WebHost string
 }
 
 func LoadConfig() (cfg Config, err error) {
@@ -83,10 +79,10 @@ func main() {
 		return
 	}
 
-	srv, err := sshproxy.CreateServer(cfg.DBDriver, cfg.DBFile, cfg.LogDir)
+	srv, err := sshproxy.CreateServer(cfg.WebHost)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	srv.MainLoop(cfg.HostPrivateKeyFile, cfg.Listen)
+	srv.MainLoop()
 }

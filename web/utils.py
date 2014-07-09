@@ -4,11 +4,12 @@
 @date: 2014-07-02
 @author: shell.xu
 '''
-import os, sys, logging
+import os, sys, json, logging
 import bottle
 from bottle import request, template, redirect
 from db import *
 
+logger = logging.getLogger('utils')
 app = bottle.default_app()
 sess = app.config['db.session']
 
@@ -36,6 +37,23 @@ def chklogin(perm=None, next=None):
             return func(session, *p, **kw)
         return _inner
     return receiver
+
+def chklocal(func):
+    def _inner(*p, **kw):
+        ip = request.remote_route[0] if request.remote_route else request.remote_addr
+        if not ip.startswith('127.0.0'): return 'sorry'
+        return func(*p, **kw)
+    return _inner
+
+def jsonenc(func):
+    def _inner(*p, **kw):
+        try: r = func(*p, **kw)
+        except Exception, err:
+            r = {'errmsg': str(err)}
+        r = json.dumps(r)
+        logger.debug(r)
+        return r
+    return _inner
 
 def log(logger, log):
     session = request.environ.get('beaker.session')

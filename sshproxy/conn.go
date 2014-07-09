@@ -5,65 +5,12 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"text/template"
+	"time"
 )
-
-func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.PublicKey) error) {
-	var err error
-	var public ssh.PublicKey
-	var publices []ssh.PublicKey
-	rest := []byte(HostKey)
-	for {
-		public, _, _, rest, err = ssh.ParseAuthorizedKey(rest)
-		if err != nil {
-			err = nil
-			break
-		}
-		publices = append(publices, public)
-	}
-
-	checkHostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) (err error) {
-		hostkey := key.Marshal()
-		log.Debug("remote hostkey: %s, type: %s", hostname, key.Type())
-
-		for _, public := range publices {
-			if key.Type() == public.Type() && bytes.Compare(hostkey, public.Marshal()) == 0 {
-				log.Info("host key match: %s", hostname)
-				return nil
-			}
-		}
-		log.Info("host key not match: %s", hostname)
-		return ErrHostKey
-	}
-	return
-}
-
-func genClientConfig(HostKey, Account, PrivateKey, Password string) (config *ssh.ClientConfig, err error) {
-	config = &ssh.ClientConfig{
-		User:            Account,
-		HostKeyCallback: CheckHostKey(HostKey),
-	}
-
-	if PrivateKey != "" {
-		private, err := ssh.ParsePrivateKey([]byte(PrivateKey))
-		if err != nil {
-			log.Error("failed to parse keyfile: %s", err.Error())
-			return nil, err
-		}
-		config.Auth = append(config.Auth, ssh.PublicKeys(private))
-	}
-	if Password != "" {
-		config.Auth = append(config.Auth, ssh.Password(Password))
-	}
-
-	return
-}
 
 type ConnInfo struct {
 	srv *Server
@@ -71,45 +18,29 @@ type ConnInfo struct {
 	wg  sync.WaitGroup
 
 	Username string
-	Perms    map[string]int
 
-	Account   string
-	Accountid int
-	Key       string
-	Password  string
-
-	Hostid       int
 	Host         string
-	Hostname     string
-	Port         int
+	Account      string
+	Acct         *AccountInfo
+	Proxy        *AccountInfo
 	ProxyCommand string
-	ProxyAccount int
-	Hostkeys     string
 
-	RecordId int64
+	Perms map[string]int
+
+	RecordId  int
+	Starttime time.Time
 }
 
 func (srv *Server) createSshConnServer(username, account, host string) (scs SshConnServer, err error) {
 	ci := &ConnInfo{
 		srv:      srv,
-		db:       srv.db,
 		Username: username,
-		Perms:    make(map[string]int, 0),
 		Account:  account,
 		Host:     host,
-	}
-
-	err = ci.loadHost()
-	if err != nil {
-		return
+		Perms:    make(map[string]int, 0),
 	}
 
 	err = ci.loadAccount()
-	if err != nil {
-		return
-	}
-
-	err = ci.loadPerms()
 	if err != nil {
 		return
 	}
@@ -122,20 +53,77 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 	return ci, nil
 }
 
+func (ci *ConnInfo) loadAccount() (err error) {
+	v := &url.Values{}
+	v.Add("username", ci.Username)
+	v.Add("account", ci.Account)
+	v.Add("host", ci.Host)
+
+	type AccountRsltProxy struct {
+		AccountInfo
+		Proxy        *AccountInfo
+		ProxyCommand string
+		Perms        []string
+	}
+	rslt := &AccountRsltProxy{}
+
+	err = ci.srv.GetJson("/h/query", v, rslt)
+	if err != nil {
+		return
+	}
+
+	ci.Acct = &rslt.AccountInfo
+	if rslt.Proxy != nil {
+		ci.Proxy = rslt.Proxy
+		ci.ProxyCommand = rslt.ProxyCommand
+	}
+
+	log.Info("query perms: %s / %s@%s => %v.", ci.Username, ci.Account, ci.Host, rslt.Perms)
+	for _, p := range rslt.Perms {
+		ci.Perms[p] = 1
+	}
+	return
+}
+
 func (ci *ConnInfo) ChkPerm(name string) (ok bool) {
 	_, ok = ci.Perms[name]
 	return
 }
 
+func (ci *ConnInfo) insertRecord() (err error) {
+	v := &url.Values{}
+	v.Add("username", ci.Username)
+	v.Add("account", ci.Account)
+	v.Add("host", ci.Host)
+
+	type RecordRslt struct {
+		Recordid  int
+		Starttime string
+	}
+	rslt := &RecordRslt{}
+
+	err = ci.srv.GetJson("/rec/add", v, rslt)
+	if err != nil {
+		return
+	}
+	ci.RecordId = rslt.Recordid
+	ci.Starttime, err = time.Parse("2006-01-02T15:04:05", rslt.Starttime)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
 	// and try connect it as last step
-	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
+	hostname := fmt.Sprintf("%s:%d", ci.Acct.Hostname, ci.Acct.Port)
 	var conn net.Conn
 	switch {
-	case ci.ProxyAccount != 0:
-		log.Info("ssh proxy: %s:%d with accountid %d",
-			ci.Hostname, ci.Port, ci.ProxyAccount)
-		conn, err = ci.connectProxy(ci.ProxyAccount, ci.Hostname, ci.Port)
+	case ci.Proxy != nil:
+		log.Info("ssh proxy: %s:%d with proxy %s@%s:%d",
+			ci.Acct.Hostname, ci.Acct.Port,
+			ci.Proxy.Account, ci.Proxy.Hostname, ci.Proxy.Port)
+		conn, err = ci.connectProxy(ci.Acct.Hostname, ci.Acct.Port)
 		if err != nil {
 			log.Error("ssh dial failed: %s", err.Error())
 			return
@@ -149,7 +137,7 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 		}
 	}
 
-	config, err := genClientConfig(ci.Hostkeys, ci.Account, ci.Key, ci.Password)
+	config, err := ci.Acct.ClientConfig()
 	if err != nil {
 		return
 	}
@@ -210,20 +198,15 @@ func (ci *ConnInfo) fmtCmd(desthost string, destport int) (cmd string, err error
 	return
 }
 
-func (ci *ConnInfo) connectProxy(accountid int, desthost string, destport int) (conn net.Conn, err error) {
-	account, keys, password, hostname, port, hostkeys, err := ci.getProxy(accountid)
-	if err != nil {
-		return
-	}
-	log.Info("ssh to %s@%s:%d", account, hostname, port)
-
-	config, err := genClientConfig(hostkeys, account, keys, password)
+func (ci *ConnInfo) connectProxy(desthost string, destport int) (conn net.Conn, err error) {
+	config, err := ci.Proxy.ClientConfig()
 	if err != nil {
 		return
 	}
 
+	log.Info("ssh to %s@%s:%d", ci.Proxy.Account, ci.Proxy.Hostname, ci.Proxy.Port)
 	client, err := ssh.Dial("tcp",
-		fmt.Sprintf("%s:%d", hostname, port), config)
+		fmt.Sprintf("%s:%d", ci.Proxy.Hostname, ci.Proxy.Port), config)
 	if err != nil {
 		return
 	}
@@ -303,4 +286,10 @@ func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel
 
 	log.Info("Connect closed.")
 	return ci.updateEndtime()
+}
+
+func (ci *ConnInfo) updateEndtime() (err error) {
+	v := &url.Values{}
+	v.Add("recordid", fmt.Sprintf("%d", ci.RecordId))
+	return ci.srv.GetJson("/rec/end", v, nil)
 }

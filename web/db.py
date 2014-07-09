@@ -110,7 +110,7 @@ class RecordLogs(Base):
     recordid = Column(Integer, ForeignKey('records.id'))
     rec = relationship('Records')
     time = Column(DateTime, nullable=False, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
-    type = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
     log1 = Column(String)
     log2 = Column(String)
     num1 = Column(Integer)

@@ -2,9 +2,12 @@ package sshproxy
 
 import (
 	"code.google.com/p/go.crypto/ssh"
-	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -13,24 +16,66 @@ type SshConnServer interface {
 	Serve(ssh.ServerConn, <-chan ssh.NewChannel, <-chan *ssh.Request) error
 }
 
-type Server struct {
-	db     *sql.DB
-	mu     sync.Mutex
-	scss   map[net.Addr]SshConnServer
-	LogDir string
+type WebConfig struct {
+	Listen  string
+	Hostkey string
+	Logdir  string
 }
 
-func CreateServer(dbdriver, dbfile, logdir string) (srv *Server, err error) {
+type Server struct {
+	WebConfig
+	webhost string
+	srvcfg  *ssh.ServerConfig
+	mu      sync.Mutex
+	scss    map[net.Addr]SshConnServer
+}
+
+func CreateServer(webhost string) (srv *Server, err error) {
 	srv = &Server{
-		scss:   make(map[net.Addr]SshConnServer, 0),
-		LogDir: logdir,
+		scss:    make(map[net.Addr]SshConnServer, 0),
+		webhost: webhost,
+	}
+	srv.srvcfg = &ssh.ServerConfig{
+		PublicKeyCallback: srv.authUser,
 	}
 
-	srv.db, err = sql.Open(dbdriver, dbfile)
+	v := &url.Values{}
+	err = srv.GetJson("/cfg", v, &srv.WebConfig)
 	if err != nil {
 		panic(err.Error())
 	}
+	log.Debug("config: %#v", srv.WebConfig)
 
+	private, err := LoadPrivateKey(srv.WebConfig.Hostkey)
+	if err != nil {
+		return
+	}
+	srv.srvcfg.AddHostKey(private)
+
+	return
+}
+
+func (srv *Server) GetJson(base string, v *url.Values, obj interface{}) (err error) {
+	u := fmt.Sprintf("http://%s%s?%s", srv.webhost, base, v.Encode())
+	log.Info("get url: %s", u)
+	resp, err := http.Get(u)
+	if err != nil {
+		log.Error("query failed: %s", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if obj == nil {
+		return
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	err = dec.Decode(&obj)
+	if err != nil {
+		log.Error("decode json failed: %s", err.Error())
+		return
+	}
+	log.Debug("%#v", obj)
 	return
 }
 
@@ -69,6 +114,25 @@ func (srv *Server) closeConn(remote net.Addr) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	delete(srv.scss, remote)
+}
+
+func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
+	pubkey := base64.StdEncoding.EncodeToString(key.Marshal())
+	v := &url.Values{}
+	v.Add("pubkey", pubkey)
+
+	type PubkeyRslt struct {
+		Name     string
+		Username string
+	}
+	rslt := &PubkeyRslt{}
+
+	err = srv.GetJson("/pubk/query", v, rslt)
+	if err != nil {
+		return
+	}
+	username = rslt.Username
+	return
 }
 
 func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh.Permissions, err error) {
@@ -110,18 +174,8 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 }
 
 // FIXME: time limit
-func (srv *Server) MainLoop(HostPrivateKeyFile, Listen string) {
-	config := &ssh.ServerConfig{
-		PublicKeyCallback: srv.authUser,
-	}
-
-	private, err := LoadPrivateKey(HostPrivateKeyFile)
-	if err != nil {
-		return
-	}
-	config.AddHostKey(private)
-
-	listener, err := net.Listen("tcp", Listen)
+func (srv *Server) MainLoop() {
+	listener, err := net.Listen("tcp", srv.WebConfig.Listen)
 	if err != nil {
 		log.Error("failed to listen for connection: %s", err.Error())
 		return
@@ -135,7 +189,7 @@ func (srv *Server) MainLoop(HostPrivateKeyFile, Listen string) {
 		}
 		log.Debug("net connect coming.")
 
-		conn, chans, reqs, err := ssh.NewServerConn(nConn, config)
+		conn, chans, reqs, err := ssh.NewServerConn(nConn, srv.srvcfg)
 		if err != nil {
 			log.Error("failed to handshake: %s", err.Error())
 			continue

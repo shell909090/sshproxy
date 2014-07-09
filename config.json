@@ -2,11 +2,5 @@
     "Logfile": "",
     "Loglevel": "DEBUG",
 
-    "HostPrivateKeyFile": "ssh_host_rsa_key",
-    "Listen": "0.0.0.0:2022",
-    "DBDriver": "sqlite3",
-    "DBFile": "ssh.db",
-    "LogDir": "logs",
-
-    "LogFileTransfer": 1
+    "WebHost": "127.0.0.1:8080"
 }

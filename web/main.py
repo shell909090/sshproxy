@@ -4,7 +4,7 @@
 @date: 2014-07-02
 @author: shell.xu
 '''
-import os, sys, getopt, sqlite3, logging
+import os, sys, getopt, logging
 import bottle
 from beaker.middleware import SessionMiddleware
 import sqlalchemy, sqlalchemy.orm
@@ -35,8 +35,15 @@ session_opts = {
 application = SessionMiddleware(app, session_opts)
 
 @bottle.route('/static/<filename:path>')
-def server_static(filename):
+def _static(filename):
     return bottle.static_file(filename, root='static/')
+
+@bottle.route('/cfg')
+@utils.chklocal
+@utils.jsonenc
+def _config():
+    return dict([(k[6:], v) for k, v in app.config.iteritems()
+                 if k.startswith('proxy.')])
 
 import users, hosts, groups, records
 

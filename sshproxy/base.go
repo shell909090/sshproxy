@@ -38,6 +38,36 @@ func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
 	return
 }
 
+func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.PublicKey) error) {
+	var err error
+	var public ssh.PublicKey
+	var publices []ssh.PublicKey
+	rest := []byte(HostKey)
+	for {
+		public, _, _, rest, err = ssh.ParseAuthorizedKey(rest)
+		if err != nil {
+			err = nil
+			break
+		}
+		publices = append(publices, public)
+	}
+
+	checkHostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) (err error) {
+		hostkey := key.Marshal()
+		log.Debug("remote hostkey: %s, type: %s", hostname, key.Type())
+
+		for _, public := range publices {
+			if key.Type() == public.Type() && bytes.Compare(hostkey, public.Marshal()) == 0 {
+				log.Info("host key match: %s", hostname)
+				return nil
+			}
+		}
+		log.Info("host key not match: %s", hostname)
+		return ErrHostKey
+	}
+	return
+}
+
 func MultiCopyClose(s io.Reader, ds ...io.WriteCloser) (err error) {
 	var ws []io.Writer
 	for _, d := range ds {
@@ -107,4 +137,36 @@ func (ds *DebugStream) Write(p []byte) (n int, err error) {
 
 func (ds *DebugStream) Close() error {
 	return nil
+}
+
+type AccountInfo struct {
+	Hostid    int
+	Hostname  string
+	Port      int
+	HostKey   string
+	Accountid int
+	Account   string
+	Key       string
+	Password  string
+}
+
+func (ai *AccountInfo) ClientConfig() (config *ssh.ClientConfig, err error) {
+	config = &ssh.ClientConfig{
+		User:            ai.Account,
+		HostKeyCallback: CheckHostKey(ai.HostKey),
+	}
+
+	if ai.Key != "" {
+		private, err := ssh.ParsePrivateKey([]byte(ai.Key))
+		if err != nil {
+			log.Error("failed to parse keyfile: %s", err.Error())
+			return nil, err
+		}
+		config.Auth = append(config.Auth, ssh.PublicKeys(private))
+	}
+	if ai.Password != "" {
+		config.Auth = append(config.Auth, ssh.Password(ai.Password))
+	}
+
+	return
 }

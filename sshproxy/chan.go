@@ -4,13 +4,14 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 )
 
 type ChanInfo struct {
 	ci           *ConnInfo
-	RecordLogsId int64
+	RecordLogsId int
 	ch           chan int
 	Type         string
 	RemoteDir    string
@@ -26,13 +27,29 @@ func CreateChanInfo(ci *ConnInfo) (chi *ChanInfo) {
 	return chi
 }
 
-func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
-	starttime, err := chi.ci.getStarttime()
+func (chi *ChanInfo) insertRecordLogs(rltype, log1, log2 string, num1 int) (id int, err error) {
+	v := &url.Values{}
+	v.Add("recordid", fmt.Sprintf("%d", chi.ci.RecordId))
+	v.Add("type", rltype)
+	v.Add("log1", log1)
+	v.Add("log2", log2)
+	v.Add("num1", fmt.Sprintf("%d", num1))
+
+	type RecordLogsRslt struct {
+		Id int
+	}
+	rslt := &RecordLogsRslt{}
+
+	err = chi.ci.srv.GetJson("/rlog/add", v, rslt)
 	if err != nil {
 		return
 	}
+	id = rslt.Id
+	return
+}
 
-	logDir := fmt.Sprintf("%s/%s", chi.ci.srv.LogDir, starttime.Format("20060102"))
+func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
+	logDir := fmt.Sprintf("%s/%s", chi.ci.srv.WebConfig.Logdir, chi.ci.Starttime.Format("20060102"))
 	err = os.MkdirAll(logDir, 0755)
 	if err != nil {
 		return
