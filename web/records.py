@@ -60,13 +60,13 @@ def _list(session):
     sess.commit()
     return utils.paged_template('recs.html', _recs=recs)
 
-@route('/rec/add')
+@route('/rec/add', method='POST')
 @utils.chklocal
 @utils.jsonenc
 def _add():
-    username = request.query.get('username')
-    account = request.query.get('account')
-    host = request.query.get('host')
+    username = request.forms.get('username')
+    account = request.forms.get('account')
+    host = request.forms.get('host')
     if not (username and account and host):
         return {'errmsg': 'username or account or host is empty.'}
     rec = Records(username=username, account=account, host=host)
@@ -74,17 +74,17 @@ def _add():
     sess.commit()
     return {'recordid': rec.id, 'starttime': rec.starttime.isoformat()}
 
-@route('/rec/end')
+@route('/rec/end', method='POST')
 @utils.chklocal
 @utils.jsonenc
 def _end():
-    recordid = request.query.get('recordid')
+    recordid = request.forms.get('recordid')
     if not id:
         return {'errmsg': 'recordid empty'}
     rec = sess.query(Records).filter_by(id=recordid).scalar()
     if not rec:
         return {'errmsg': 'rec not exist.'}
-    rec.endtime
+    rec.endtime = sqlalchemy.text('CURRENT_TIMESTAMP')
     sess.commit()
     return
 
@@ -119,19 +119,19 @@ def _show(session, id):
             yield d
             d = fi.read(1024)
 
-@route('/rlog/add')
+@route('/rlog/add', method='POST')
 @utils.chklocal
 @utils.jsonenc
 def _add():
-    recordid = request.query.get('recordid')
+    recordid = request.forms.get('recordid')
     if not recordid:
         return {'errmsg': 'recordid empty'}
     rlog = RecordLogs(
         recordid=recordid,
-        type=request.query.get('type'),
-        log1=request.query.get('log1'),
-        log2=request.query.get('log2'),
-        num1=request.query.get('num1'))
+        type=request.forms.get('type'),
+        log1=request.forms.get('log1'),
+        log2=request.forms.get('log2'),
+        num1=request.forms.get('num1'))
     sess.add(rlog)
     sess.commit()
     return {'id': rlog.id}

@@ -67,7 +67,7 @@ func (ci *ConnInfo) loadAccount() (err error) {
 	}
 	rslt := &AccountRsltProxy{}
 
-	err = ci.srv.GetJson("/h/query", v, rslt)
+	err = ci.srv.GetJson("/h/query", false, v, rslt)
 	if err != nil {
 		return
 	}
@@ -102,7 +102,7 @@ func (ci *ConnInfo) insertRecord() (err error) {
 	}
 	rslt := &RecordRslt{}
 
-	err = ci.srv.GetJson("/rec/add", v, rslt)
+	err = ci.srv.GetJson("/rec/add", true, v, rslt)
 	if err != nil {
 		return
 	}
@@ -291,5 +291,5 @@ func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel
 func (ci *ConnInfo) updateEndtime() (err error) {
 	v := &url.Values{}
 	v.Add("recordid", fmt.Sprintf("%d", ci.RecordId))
-	return ci.srv.GetJson("/rec/end", v, nil)
+	return ci.srv.GetJson("/rec/end", true, v, nil)
 }

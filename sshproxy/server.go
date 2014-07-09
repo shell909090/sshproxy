@@ -1,6 +1,7 @@
 package sshproxy
 
 import (
+	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"encoding/base64"
 	"encoding/json"
@@ -40,7 +41,7 @@ func CreateServer(webhost string) (srv *Server, err error) {
 	}
 
 	v := &url.Values{}
-	err = srv.GetJson("/cfg", v, &srv.WebConfig)
+	err = srv.GetJson("/cfg", false, v, &srv.WebConfig)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -55,10 +56,18 @@ func CreateServer(webhost string) (srv *Server, err error) {
 	return
 }
 
-func (srv *Server) GetJson(base string, v *url.Values, obj interface{}) (err error) {
-	u := fmt.Sprintf("http://%s%s?%s", srv.webhost, base, v.Encode())
-	log.Info("get url: %s", u)
-	resp, err := http.Get(u)
+func (srv *Server) GetJson(base string, post bool, v *url.Values, obj interface{}) (err error) {
+	var resp *http.Response
+	if post {
+		u := fmt.Sprintf("http://%s%s", srv.webhost, base)
+		log.Info("post url: %s", u)
+		buf := bytes.NewBufferString(v.Encode())
+		resp, err = http.Post(u, "pplication/x-www-form-urlencoded", buf)
+	} else {
+		u := fmt.Sprintf("http://%s%s?%s", srv.webhost, base, v.Encode())
+		log.Info("get url: %s", u)
+		resp, err = http.Get(u)
+	}
 	if err != nil {
 		log.Error("query failed: %s", err.Error())
 		return
@@ -127,7 +136,7 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
 	}
 	rslt := &PubkeyRslt{}
 
-	err = srv.GetJson("/pubk/query", v, rslt)
+	err = srv.GetJson("/pubk/query", false, v, rslt)
 	if err != nil {
 		return
 	}

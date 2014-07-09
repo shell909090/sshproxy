@@ -1,12 +1,14 @@
 package sshproxy
 
 import (
+	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"encoding/binary"
 	"errors"
 	"github.com/op/go-logging"
 	"io"
 	"io/ioutil"
+	"net"
 )
 
 var (
