@@ -133,15 +133,14 @@ def _renew_hostkey(session, id):
 @route('/acct/select')
 @utils.chklogin('hosts')
 def _select(session):
-    accounts = session.pop('selected')
     hosts = sess.query(Hosts).order_by(Hosts.id)
-    return utils.paged_template('acct_sel.html', _hosts=hosts, selected=accounts)
+    return utils.paged_template(
+        'acct_sel.html', _hosts=hosts, selected=set(session.pop('selected')))
 
 @route('/acct/select', method='POST')
 @utils.chklogin('hosts')
 def _select(session):
-    accounts = request.forms.getall('accts')
-    session['selected'] = accounts
+    session['selected'] = request.forms.getall('accts')
     return bottle.redirect(request.query.next or '/')
 
 @route('/acct/<id:int>')

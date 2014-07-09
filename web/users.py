@@ -53,15 +53,14 @@ def _list(session):
 @route('/usr/select')
 @utils.chklogin('users')
 def _select(session):
-    usernames = session.pop('selected')
     users = sess.query(Users).order_by(Users.username)
-    return utils.paged_template('usr.html', _users=users, selected=set(usernames))
+    return utils.paged_template(
+        'usr.html', _users=users, selected=set(session.pop('selected')))
 
 @route('/usr/select', method='POST')
 @utils.chklogin('users')
 def _select(session):
-    usernames = request.forms.getall('users')
-    session['selected'] = usernames
+    session['selected'] = request.forms.getall('users')
     return bottle.redirect(request.query.next or '/')
 
 @route('/usr/add')

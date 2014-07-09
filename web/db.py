@@ -4,25 +4,27 @@
 @date: 2014-07-03
 @author: shell.xu
 '''
-import os, sys
+import os, sys, operator
 import bcrypt, sqlalchemy
 from sqlalchemy import desc, or_, Table, Column, Integer, String
 from sqlalchemy import DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 
-__all__ = ['Users', 'Pubkeys', 'Hosts', 'Accounts', 'Groups',
-           'Records', 'RecordLogs', 'AuditLogs',
-           'ALLRULES', 'PERMS', 'ALLPERMS', 'crypto_pass', 'check_pass',
-           'sqlalchemy', 'desc', 'or_']
+__all__ = [
+    'Users', 'Pubkeys', 'Hosts', 'Accounts', 'GroupGroup', 'Groups',
+    'Records', 'RecordLogs', 'AuditLogs',
+    'ALLRULES', 'PERMS', 'ALLPERMS',
+    'crypto_pass', 'check_pass', 'is_parent', 'cal_group',
+    'sqlalchemy', 'desc', 'or_']
 
 Base = declarative_base()
 
 ALLRULES = ['admin', 'users', 'hosts', 'groups', 'audit']
 PERMS = ['shell', 'scpfrom', 'scpto', 'tcp', 'agent']
 
-addx = lambda c: lambda x: [c+i for i in x]
-ALLPERMS = addx('+')(PERMS) + addx('-')(PERMS)
+addx = lambda c: lambda x: c + x
+ALLPERMS = map(addx('+'), PERMS) + map(addx('-'), PERMS)
 
 def crypto_pass(p):
     return bcrypt.hashpw(p, bcrypt.gensalt())
@@ -77,14 +79,20 @@ account_group = Table(
     Column('accounts_id', Integer, ForeignKey('accounts.id')),
     Column('groups_id', Integer, ForeignKey('groups.id')))
 
+class GroupGroup(Base):
+    __tablename__ = 'group_group'
+    id = Column(Integer, primary_key=True)
+    childid = Column(Integer, ForeignKey('groups.id'))
+    parentid = Column(Integer, ForeignKey('groups.id'))
+    child = relationship('Groups', backref='parents', foreign_keys=[childid,])
+    parent = relationship('Groups', backref='children', foreign_keys=[parentid,])
+
 class Groups(Base):
     __tablename__ = 'groups'
     id = Column(Integer, primary_key=True)
     name = Column(String, index=True, unique=True)
-    users = relationship("Users", secondary=user_group)
-    accounts = relationship("Accounts", secondary=account_group)
-    parentid = Column(Integer, ForeignKey('groups.id'))
-    parent = relationship('Groups', foreign_keys=[parentid,], uselist=False)
+    users = relationship("Users", backref='groups', secondary=user_group)
+    accounts = relationship("Accounts", backref='groups', secondary=account_group)
     perms = Column(String)
 
 class Records(Base):
@@ -114,6 +122,25 @@ class AuditLogs(Base):
     username = Column(String, ForeignKey('users.username'))
     level = Column(Integer)
     log = Column(String)
+
+def is_parent(child, parent):
+    if child == parent: return True
+    return any(gg.parent == parent or is_parent(gg.parent, parent)
+               for gg in child.parents)
+
+def cal_group(user, acct):
+    ag = acct.groups
+    def search(g, perms):
+        perms = perms | set(g.perms.split(','))
+        if g in ag: return perms
+        return search_list([gg.parent for gg in g.parents], perms)
+    def search_list(gl, perms):
+        l = filter(bool, [search(g, perms) for g in gl])
+        return set() if not l else reduce(operator.and_, l)
+    rslt = {}
+    for p in search_list(user.groups, set()):
+        rslt.setdefault(p[1:], []).append(p[0])
+    return [k for k, l in rslt.items() if ('-' not in l) and ('+' in l)]
 
 def main():
     import getopt, subprocess, ConfigParser

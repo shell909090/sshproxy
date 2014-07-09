@@ -19,6 +19,19 @@ def _list(session):
     groups = sess.query(Groups).order_by(Groups.id)
     return utils.paged_template('grp.html', _groups=groups)
 
+@route('/grp/select')
+@utils.chklogin('groups')
+def _select(session):
+    groups = sess.query(Groups).order_by(Groups.id)
+    return utils.paged_template(
+        'grp.html', _groups=groups, selected=set(session.pop('selected')))
+
+@route('/grp/select', method='POST')
+@utils.chklogin('groups')
+def _select(session):
+    session['selected'] = request.forms.getall('groups')
+    return bottle.redirect(request.query.next or '/')
+
 @route('/grp/add')
 @utils.chklogin('groups')
 def _add(session):
@@ -57,27 +70,13 @@ def _edit(session, id):
     if not group:
         return 'group not exist.'
 
-    parent = sess.query(Groups).filter_by(name=request.forms.parent).scalar()
-    if not parent:
-        return 'parent not exist.'
-    u = parent
-    while u:
-        if u == group:
-            return template(
-                'grp_edit.html', group=group,
-                errmsg='Oops, parent looped.')
-        u = u.parent
-
-    group.name = request.forms.name
-
     perms = set(request.forms.getall('perms')) & set(ALLPERMS)
     perms = ','.join(perms)
     group.perms = perms
+    group.name = request.forms.name
 
-    group.parent = parent
-
-    utils.log(logger, 'change group name %s => %s, perms: %s => %s, parent: %s' % (
-        group.name, request.forms.name, group.perms, perms, request.forms.parent))
+    utils.log(logger, 'change group name %s => %s, perms: %s => %s' % (
+        group.name, request.forms.name, group.perms, perms))
     sess.commit()
     return bottle.redirect('/grp/')
 
@@ -91,7 +90,7 @@ def _associated(session, id):
 
     if 'selected' not in session:
         session['selected'] = grpusrs
-        return bottle.redirect('/usr/select?next=/grp/%d/usrs' % id)
+        return bottle.redirect('/usr/select?next=%s' % request.path)
     usernames = set(session.pop('selected'))
 
     for u in grpusrs - usernames:
@@ -123,7 +122,7 @@ def _associated(session, id):
 
     if 'selected' not in session:
         session['selected'] = grpaccts
-        return bottle.redirect('/acct/select?next=/grp/%d/accts' % id)
+        return bottle.redirect('/acct/select?next=%s' % request.path)
     accounts = set(session.pop('selected'))
 
     for id in grpaccts - accounts:
@@ -145,6 +144,41 @@ def _associated(session, id):
     sess.commit()
     return bottle.redirect('/grp/')
 
+@route('/grp/<id:int>/grp')
+@utils.chklogin('groups')
+def _associated(session, id):
+    group = sess.query(Groups).filter_by(id=id).scalar()
+    if not group:
+        return 'group not exist.'
+    grpgrps = set([gg.parent.id for gg in group.parents])
+
+    if 'selected' not in session:
+        session['selected'] = grpgrps
+        return bottle.redirect('/grp/select?next=%s' % request.path)
+    groups = set(session.pop('selected'))
+
+    # remove relationship which de-selected.
+    rmset = grpgrps - groups
+    rmset = [gg for gg in group.parents if gg.parent.id in rmset]
+    map(group.parents.remove, rmset)
+    map(sess.delete, rmset)
+
+    for id in groups - grpgrps:
+        grp = sess.query(Groups).filter_by(id=id).scalar()
+        if not grp:
+            sess.rollback()
+            return 'group not exist.'
+        if is_parent(grp, group):
+            sess.rollback()
+            return 'Oops, parents looped.'
+        group.parents.append(GroupGroup(
+            childid=group.id, parentid=id))
+
+    utils.log(logger, 'associated group to group %s(%d): %s' % (
+        group.name, group.id, ','.join([str(id) for id in groups])))
+    sess.commit()
+    return bottle.redirect('/grp/')
+
 @route('/grp/<id:int>/rem')
 @utils.chklogin('groups')
 def _remove(session, id):
@@ -160,9 +194,18 @@ def _remove(session, id):
 @route('/grp/cal')
 @utils.chklogin('groups')
 def _calculus(session):
-    pass
+    username = request.query.get('username')
+    account = request.query.get('account')
+    host = request.query.get('host')
+    if not (username and account and host):
+        return template('cal.html')
 
-@route('/grp/cal', method='POST')
-@utils.chklogin('groups')
-def _calculus(session):
-    pass
+    user = sess.query(Users).filter_by(username=username).scalar()
+    if not user:
+        return template('cal.html', errmeg='user not found')
+    acct = sess.query(Accounts).filter_by(account=account).join(Accounts.host).filter_by(host=host).scalar()
+    if not user:
+        return template('cal.html', errmeg='account not found')
+
+    perms = cal_group(user, acct)
+    return template('cal.html', perms=perms)
