@@ -95,13 +95,7 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 		return
 	}
 
-	// check if realname can access user and host
-	err = srv.checkAccess(username, account, host, remote)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return
-	}
-
+	log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
 	scs, err := srv.createSshConnServer(username, account, host)
 	if err != nil {
 		log.Error("%s", err.Error())

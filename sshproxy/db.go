@@ -4,7 +4,6 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"encoding/base64"
-	"net"
 	"time"
 )
 
@@ -23,11 +22,6 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
 	return
 }
 
-func (srv *Server) checkAccess(username, account, host string, remote net.Addr) (err error) {
-	log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
-	return
-}
-
 func (ci *ConnInfo) loadHost() (err error) {
 	var ProxyCommand sql.NullString
 	var ProxyAccount sql.NullInt64
@@ -42,6 +36,24 @@ func (ci *ConnInfo) loadHost() (err error) {
 	}
 	if ProxyAccount.Valid {
 		ci.ProxyAccount = int(ProxyAccount.Int64)
+	}
+	return
+}
+
+func (ci *ConnInfo) loadAccount() (err error) {
+	// load private key from user and host
+	var Key sql.NullString
+	var Password sql.NullString
+	err = ci.db.QueryRow("SELECT id, key, password FROM accounts WHERE account=? AND hostid=?",
+		ci.Account, ci.Hostid).Scan(&ci.Accountid, &Key, &Password)
+	if err != nil {
+		log.Error("%s", err.Error())
+	}
+	if Key.Valid {
+		ci.Key = Key.String
+	}
+	if Password.Valid {
+		ci.Password = Password.String
 	}
 	return
 }
@@ -78,20 +90,19 @@ func (ci *ConnInfo) updateEndtime() (err error) {
 	return
 }
 
-func (ci *ConnInfo) getPrikey() (key string, err error) {
-	err = ci.db.QueryRow("SELECT key FROM accounts WHERE account=? AND hostid=?",
-		ci.Account, ci.Hostid).Scan(&key)
+func (ci *ConnInfo) getProxy(accountid int) (account, Keys, Password, hostname string, port int, hostkeys string, err error) {
+	var keys sql.NullString
+	var password sql.NullString
+	err = ci.db.QueryRow("SELECT a.account, a.key, a.password, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE a.id=? AND a.hostid=h.id", accountid).Scan(
+		&account, &keys, &password, &hostname, &port, &hostkeys)
 	if err != nil {
 		log.Error("%s", err.Error())
 	}
-	return
-}
-
-func (ci *ConnInfo) getProxy(accountid int) (account, keys, hostname string, port int, hostkeys string, err error) {
-	err = ci.db.QueryRow("SELECT a.account, a.key, h.hostname, h.port, h.hostkeys FROM accounts a JOIN hosts h WHERE a.id=? AND a.hostid=h.id", accountid).Scan(
-		&account, &keys, &hostname, &port, &hostkeys)
-	if err != nil {
-		log.Error("%s", err.Error())
+	if keys.Valid {
+		Keys = keys.String
+	}
+	if password.Valid {
+		Password = password.String
 	}
 	return
 }

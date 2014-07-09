@@ -209,3 +209,23 @@ def _calculus(session):
 
     perms = cal_group(user, acct)
     return template('cal.html', perms=perms)
+
+@route('/perms')
+def _calculus():
+    ip = request.remote_route[0] if request.remote_route else request.remote_addr
+    if not ip.startswith('127.0.0'): return 'sorry'
+
+    username = request.query.get('username')
+    account = request.query.get('account')
+    host = request.query.get('host')
+    if not (username and account and host):
+        return 'username or account or host is empty.'
+    
+    user = sess.query(Users).filter_by(username=username).scalar()
+    if not user:
+        return 'user not found'
+    acct = sess.query(Accounts).filter_by(account=account).join(Accounts.host).filter_by(host=host).scalar()
+    if not user:
+        return 'account not found'
+
+    return ','.join(cal_group(user, acct))

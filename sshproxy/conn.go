@@ -5,7 +5,11 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"text/template"
 )
@@ -40,18 +44,24 @@ func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.Publi
 	return
 }
 
-func genClientConfig(Account, PrivateKey, HostKey string) (config *ssh.ClientConfig, err error) {
-	private, err := ssh.ParsePrivateKey([]byte(PrivateKey))
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-
+func genClientConfig(HostKey, Account, PrivateKey, Password string) (config *ssh.ClientConfig, err error) {
 	config = &ssh.ClientConfig{
 		User:            Account,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(private)},
 		HostKeyCallback: CheckHostKey(HostKey),
 	}
+
+	if PrivateKey != "" {
+		private, err := ssh.ParsePrivateKey([]byte(PrivateKey))
+		if err != nil {
+			log.Error("failed to parse keyfile: %s", err.Error())
+			return nil, err
+		}
+		config.Auth = append(config.Auth, ssh.PublicKeys(private))
+	}
+	if Password != "" {
+		config.Auth = append(config.Auth, ssh.Password(Password))
+	}
+
 	return
 }
 
@@ -60,8 +70,14 @@ type ConnInfo struct {
 	db  *sql.DB
 	wg  sync.WaitGroup
 
-	Username     string
-	Account      string
+	Username string
+	Perms    map[string]int
+
+	Account   string
+	Accountid int
+	Key       string
+	Password  string
+
 	Hostid       int
 	Host         string
 	Hostname     string
@@ -69,7 +85,8 @@ type ConnInfo struct {
 	ProxyCommand string
 	ProxyAccount int
 	Hostkeys     string
-	RecordId     int64
+
+	RecordId int64
 }
 
 func (srv *Server) createSshConnServer(username, account, host string) (scs SshConnServer, err error) {
@@ -77,11 +94,22 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 		srv:      srv,
 		db:       srv.db,
 		Username: username,
+		Perms:    make(map[string]int, 0),
 		Account:  account,
 		Host:     host,
 	}
 
 	err = ci.loadHost()
+	if err != nil {
+		return
+	}
+
+	err = ci.loadAccount()
+	if err != nil {
+		return
+	}
+
+	err = ci.checkPerms()
 	if err != nil {
 		return
 	}
@@ -94,13 +122,36 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 	return ci, nil
 }
 
-func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
-	// load private key from user and host
-	key, err := ci.getPrikey()
+func (ci *ConnInfo) checkPerms() (err error) {
+	v := url.Values{}
+	v.Add("username", ci.Username)
+	v.Add("account", ci.Account)
+	v.Add("host", ci.Host)
+
+	url := fmt.Sprintf("http://localhost:8080/perms?%s", v.Encode())
+	log.Info("access %s", url)
+	resp, err := http.Get(url)
 	if err != nil {
+		log.Error("query perms failed: %s", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Error("query perms failed: %s", err.Error())
 		return
 	}
 
+	perms := strings.Split(string(b), ",")
+	log.Info("query perms: %s / %s@%s => %s.", ci.Username, ci.Account, ci.Host, string(b))
+	for _, p := range perms {
+		ci.Perms[p] = 1
+	}
+	return
+}
+
+func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
 	// and try connect it as last step
 	hostname := fmt.Sprintf("%s:%d", ci.Hostname, ci.Port)
 	var conn net.Conn
@@ -122,7 +173,7 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 		}
 	}
 
-	config, err := genClientConfig(ci.Account, key, ci.Hostkeys)
+	config, err := genClientConfig(ci.Hostkeys, ci.Account, ci.Key, ci.Password)
 	if err != nil {
 		return
 	}
@@ -184,13 +235,13 @@ func (ci *ConnInfo) fmtCmd(desthost string, destport int) (cmd string, err error
 }
 
 func (ci *ConnInfo) connectProxy(accountid int, desthost string, destport int) (conn net.Conn, err error) {
-	account, keys, hostname, port, hostkeys, err := ci.getProxy(accountid)
+	account, keys, password, hostname, port, hostkeys, err := ci.getProxy(accountid)
 	if err != nil {
 		return
 	}
 	log.Info("ssh to %s@%s:%d", account, hostname, port)
 
-	config, err := genClientConfig(account, keys, hostkeys)
+	config, err := genClientConfig(hostkeys, account, keys, password)
 	if err != nil {
 		return
 	}
