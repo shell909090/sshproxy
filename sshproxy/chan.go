@@ -26,6 +26,11 @@ func CreateChanInfo(ci *ConnInfo) (chi *ChanInfo) {
 	return chi
 }
 
+// func (chi *ChanInfo) Close() (err error) {
+// 	close(chi.ch)
+// 	return
+// }
+
 func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
 	starttime, err := chi.ci.getStarttime()
 	if err != nil {
@@ -90,8 +95,16 @@ func (chi *ChanInfo) onReq(req *ssh.Request) (err error) {
 			switch cmds[len(cmds)-2] {
 			case "-t":
 				chi.Type = "scpto"
+				if !chi.ci.ChkPerm("scpto") {
+					close(chi.ch)
+					return ErrNoPerms
+				}
 			case "-f":
 				chi.Type = "scpfrom"
+				if !chi.ci.ChkPerm("scpfrom") {
+					close(chi.ch)
+					return ErrNoPerms
+				}
 			}
 			chi.ch <- 1
 			chi.RemoteDir = cmds[len(cmds)-1]
@@ -103,6 +116,10 @@ func (chi *ChanInfo) onReq(req *ssh.Request) (err error) {
 			chi.ExecCmds = append(chi.ExecCmds, strs[0])
 		}
 	case "shell":
+		if !chi.ci.ChkPerm("shell") {
+			close(chi.ch)
+			return ErrNoPerms
+		}
 		chi.Type = "shell"
 		chi.ch <- 1
 		log.Info("session in shell mode")
@@ -125,6 +142,11 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 	switch chantype {
 	case "session":
 	case "direct-tcpip":
+		if !chi.ci.ChkPerm("tcp") {
+			close(chi.ch)
+			return ErrNoPerms
+		}
+
 		chi.Type = "local"
 		chi.ch <- 1
 
@@ -138,6 +160,11 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 			return err
 		}
 	case "forwarded-tcpip":
+		if !chi.ci.ChkPerm("tcp") {
+			close(chi.ch)
+			return ErrNoPerms
+		}
+
 		chi.Type = "remote"
 		chi.ch <- 1
 
@@ -151,6 +178,11 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 			return err
 		}
 	case "auth-agent@openssh.com":
+		if !chi.ci.ChkPerm("tcp") {
+			close(chi.ch)
+			return ErrNoPerms
+		}
+
 		chi.Type = "sshagent"
 		chi.ch <- 1
 	default:
@@ -170,6 +202,8 @@ func (chi *ChanInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
 
 	r, err := ch.SendRequest(req.Type, req.WantReply, req.Payload)
 	if err != nil {
+		log.Error("%s", err.Error())
+		req.Reply(false, nil)
 		return
 	}
 	log.Debug("send chan req ok: %s(result: %t)", req.Type, r)
@@ -183,6 +217,7 @@ func (chi *ChanInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
 }
 
 func (ci *ChanInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
+	defer ch.Close()
 	log.Debug("chan reqs begin.")
 	for req := range reqs {
 		log.Debug("new chan req: %s(reply: %t, payload: %d).",
@@ -190,7 +225,6 @@ func (ci *ChanInfo) serveReqs(ch ssh.Channel, reqs <-chan *ssh.Request) {
 		err := ci.serveReq(ch, req)
 		if err != nil {
 			log.Error("%s", err.Error())
-			return
 		}
 	}
 	log.Debug("chan reqs end.")
@@ -202,13 +236,14 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 
 	err = chi.onType(newChan.ChannelType(), newChan.ExtraData())
 	if err != nil {
+		newChan.Reject(ssh.ResourceShortage, err.Error())
+		log.Error("reject channel: %s", err.Error())
 		return
 	}
 
 	chout, outreqs, err := conn.OpenChannel(
 		newChan.ChannelType(), newChan.ExtraData())
 	if err != nil {
-		// TODO: strace UnknownChannelType
 		newChan.Reject(ssh.UnknownChannelType, err.Error())
 		log.Error("reject channel: %s", err.Error())
 		return
@@ -225,7 +260,10 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 	go chi.serveReqs(chin, outreqs)
 	go chi.serveReqs(chout, inreqs)
 
-	<-chi.ch
+	_, ok := <-chi.ch
+	if !ok {
+		return
+	}
 
 	switch chi.Type {
 	case "local", "remote":

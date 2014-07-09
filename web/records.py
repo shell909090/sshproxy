@@ -99,8 +99,3 @@ def _list(session):
     utils.log(logger, 'view audit list.')
     sess.commit()
     return utils.paged_template('adts.html', _audits=audits)
-
-# @route('/adt/<adt:int>')
-# @utils.chklogin('audit')
-# def _show(audit):
-#     pass

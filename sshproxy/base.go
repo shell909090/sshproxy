@@ -10,13 +10,14 @@ import (
 )
 
 var (
+	ErrDataBase             = errors.New("database error")
 	ErrScpStreamIllegal     = errors.New("scp stream illegal")
 	ErrChanTypeNotSupported = errors.New("channel type not support")
 	ErrIllegalUserName      = errors.New("illegal username")
 	ErrIllegalPubkey        = errors.New("illegal pubkey")
 	ErrSCSNotFound          = errors.New("ssh conn server not found")
 	ErrHostKey              = errors.New("host key not match")
-	ErrDataBase             = errors.New("database error")
+	ErrNoPerms              = errors.New("no perms")
 )
 
 var log = logging.MustGetLogger("")

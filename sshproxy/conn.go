@@ -109,7 +109,7 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 		return
 	}
 
-	err = ci.checkPerms()
+	err = ci.loadPerms()
 	if err != nil {
 		return
 	}
@@ -122,7 +122,7 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 	return ci, nil
 }
 
-func (ci *ConnInfo) checkPerms() (err error) {
+func (ci *ConnInfo) loadPerms() (err error) {
 	v := url.Values{}
 	v.Add("username", ci.Username)
 	v.Add("account", ci.Account)
@@ -148,6 +148,11 @@ func (ci *ConnInfo) checkPerms() (err error) {
 	for _, p := range perms {
 		ci.Perms[p] = 1
 	}
+	return
+}
+
+func (ci *ConnInfo) ChkPerm(name string) (ok bool) {
+	_, ok = ci.Perms[name]
 	return
 }
 
@@ -263,13 +268,10 @@ func (ci *ConnInfo) connectProxy(accountid int, desthost string, destport int) (
 }
 
 func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
-	// FIXME: just for debug
-	if req.Type == "tcpip-forward" {
-		fmt.Sprintf("%v", req.Payload)
-	}
-
 	r, b, err := conn.SendRequest(req.Type, req.WantReply, req.Payload)
 	if err != nil {
+		log.Error("%s", err.Error())
+		req.Reply(false, nil)
 		return err
 	}
 	log.Debug("send req ok: %s(result: %t)(payload: %d)", req.Type, r, len(b))
@@ -291,7 +293,6 @@ func (ci *ConnInfo) serveReqs(conn ssh.Conn, reqs <-chan *ssh.Request) (err erro
 		err = ci.serveReq(conn, req)
 		if err != nil {
 			log.Error("%s", err.Error())
-			return err
 		}
 	}
 	log.Debug("reqs end.")
@@ -307,7 +308,6 @@ func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err 
 		err = chi.Serve(conn, newChan)
 		if err != nil {
 			log.Error("%s", err.Error())
-			return
 		}
 	}
 	log.Debug("chans ends.")
