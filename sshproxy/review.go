@@ -7,6 +7,100 @@ import (
 	"time"
 )
 
+type LogReader struct {
+	f *os.File
+	b byte
+	d time.Duration
+	t time.Time
+	l int
+}
+
+func CreateLogReader(filename string, b byte, d time.Duration) (lr *LogReader, err error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+	log.Info("open %s for audit %d.", filename, b)
+
+	lr = &LogReader{f: f, b: b, d: d}
+	return
+}
+
+func (lr *LogReader) Close() (err error) {
+	log.Info("close reader")
+	lr.f.Close()
+	return
+}
+
+func (lr *LogReader) Write(p []byte) (n int, err error) {
+	for _, c := range p {
+		i := bytes.Index([]byte("0123456789"), c)
+		log.Debug("%d", i)
+		n += 1
+	}
+	return
+}
+
+func (lr *LogReader) load() (err error) {
+	var header [3]byte
+
+	for lr.t.After(time.Now()) {
+		time.Sleep(lr.t.Sub(time.Now()))
+	}
+
+	for {
+		_, err = io.ReadFull(lr.f, header[:])
+		if err != nil && err != io.EOF {
+			log.Error("%s", err.Error())
+		}
+		if err != nil {
+			return
+		}
+
+		b := header[0]
+		l := binary.BigEndian.Uint16(header[1:])
+
+		if b != lr.b {
+			buf := make([]byte, l)
+			_, err = io.ReadFull(lr.f, buf)
+			if err != nil {
+				log.Error("%s", err.Error())
+				return
+			}
+			continue
+		}
+
+		// log.Debug("reader loaded %d.", l)
+		lr.l += int(l)
+		lr.t = time.Now().Add(lr.d)
+		return
+	}
+	return
+}
+
+func (lr *LogReader) Read(p []byte) (n int, err error) {
+	for lr.l <= 0 {
+		err = lr.load()
+		if err != nil {
+			return
+		}
+	}
+
+	if len(p) > lr.l {
+		p = p[:lr.l]
+	}
+
+	n, err = lr.f.Read(p)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+
+	lr.l -= n
+	return
+}
+
 type ReviewInfo struct {
 	srv          *Server
 	Username     string
@@ -55,6 +149,7 @@ func (ri *ReviewInfo) serveChan(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	}
 	defer lr.Close()
 
+	go MultiCopyClose(ch, lr)
 	MultiCopyClose(lr, ch)
 	log.Info("review chan end.")
 	return

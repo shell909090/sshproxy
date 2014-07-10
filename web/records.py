@@ -97,8 +97,7 @@ def _show(session, id):
         reclog.id, reclog.time.strftime('%Y%m%d %H:%M:%S')))
     sess.commit()
     with open(filepath, 'rb') as fi:
-        for d in read_sublog(fi, 2):
-            yield d
+        for d in read_sublog(fi, 2): yield d
 
 @route('/adt/')
 @utils.chklogin('audit')

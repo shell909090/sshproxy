@@ -6,12 +6,14 @@
     </tr>
   </thead>
   <tbody>
+    % from bottle import request
     % for rlog in reclogs:
     <tr>
       <td>{{rlog.time}}</td>
       <td>
 	% if rlog.type == 'shell':
 	<a href="/rlog/{{rlog.id}}">{{rlog.type}}</a>
+	[ssh {{rlog.id}}@_@{{request.urlparts.netloc.split(':', 1)[0]}}]
 	% else:
 	{{rlog.type}}
 	% end
