@@ -124,11 +124,11 @@ func (sl *SubLogger) Close() (err error) {
 }
 
 type LogReader struct {
-	f  *os.File
-	b  byte
-	d  time.Duration
-	pr io.ReadCloser
-	pw io.WriteCloser
+	f *os.File
+	b byte
+	d time.Duration
+	t time.Time
+	l int
 }
 
 func CreateLogReader(filename string, b byte, d time.Duration) (lr *LogReader, err error) {
@@ -139,58 +139,71 @@ func CreateLogReader(filename string, b byte, d time.Duration) (lr *LogReader, e
 	}
 	log.Info("open %s for audit %d.", filename, b)
 
-	pr, pw := io.Pipe()
-	lr = &LogReader{f: f, b: b, d: d, pr: pr, pw: pw}
-	go lr.Loop()
+	lr = &LogReader{f: f, b: b, d: d}
 	return
 }
 
 func (lr *LogReader) Close() (err error) {
 	log.Info("close reader")
 	lr.f.Close()
-	lr.pr.Close()
-	lr.pw.Close()
 	return
 }
 
-func (lr *LogReader) Loop() {
+func (lr *LogReader) load() (err error) {
 	var header [3]byte
-LOOP:
+
+	for lr.t.After(time.Now()) {
+		time.Sleep(lr.t.Sub(time.Now()))
+	}
+
 	for {
-		_, err := io.ReadFull(lr.f, header[:])
-		switch err {
-		case io.EOF:
-			break LOOP
-		case nil:
-		default:
+		_, err = io.ReadFull(lr.f, header[:])
+		if err != nil && err != io.EOF {
 			log.Error("%s", err.Error())
+		}
+		if err != nil {
 			return
 		}
 
 		b := header[0]
 		l := binary.BigEndian.Uint16(header[1:])
 
-		buf := make([]byte, l)
-		_, err = io.ReadFull(lr.f, buf)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-
 		if b != lr.b {
+			buf := make([]byte, l)
+			_, err = io.ReadFull(lr.f, buf)
+			if err != nil {
+				log.Error("%s", err.Error())
+				return
+			}
 			continue
 		}
 
-		_, err = lr.pw.Write(buf)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-
-		time.Sleep(lr.d)
+		// log.Debug("reader loaded %d.", l)
+		lr.l += int(l)
+		lr.t = time.Now().Add(lr.d)
+		return
 	}
+	return
 }
 
 func (lr *LogReader) Read(p []byte) (n int, err error) {
-	return lr.pr.Read(p)
+	for lr.l <= 0 {
+		err = lr.load()
+		if err != nil {
+			return
+		}
+	}
+
+	if len(p) > lr.l {
+		p = p[:lr.l]
+	}
+
+	n, err = lr.f.Read(p)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return
+	}
+
+	lr.l -= n
+	return
 }

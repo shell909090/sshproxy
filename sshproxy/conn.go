@@ -219,7 +219,7 @@ func (ci *ConnInfo) Serve(srvConn *ssh.ServerConn, srvChans <-chan ssh.NewChanne
 	go ci.serveChans(srvConn, cliChans)
 	ci.wg.Wait()
 
-	log.Info("Connect closed.")
+	log.Info("connect closed.")
 	return ci.updateEndtime()
 }
 

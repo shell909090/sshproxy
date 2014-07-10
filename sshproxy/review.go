@@ -45,7 +45,8 @@ func (ri *ReviewInfo) init() (err error) {
 }
 
 func (ri *ReviewInfo) serveChan(ch ssh.Channel, reqs <-chan *ssh.Request) {
-	go ssh.DiscardRequests(reqs)
+	go AcceptRequests(reqs)
+	log.Info("review chan begin.")
 
 	lr, err := CreateLogReader(ri.filename, 02, QUANTUM_SLICE)
 	if err != nil {
@@ -55,11 +56,13 @@ func (ri *ReviewInfo) serveChan(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	defer lr.Close()
 
 	MultiCopyClose(lr, ch)
+	log.Info("review chan end.")
 	return
 }
 
 func (ri *ReviewInfo) Serve(srvConn *ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) (err error) {
 	go ssh.DiscardRequests(srvReqs)
+	log.Info("review connect begin.")
 
 	for newChan := range srvChans {
 		if newChan.ChannelType() != "session" {
@@ -73,5 +76,6 @@ func (ri *ReviewInfo) Serve(srvConn *ssh.ServerConn, srvChans <-chan ssh.NewChan
 		}
 		go ri.serveChan(ch, reqs)
 	}
+	log.Info("review connect closed.")
 	return
 }

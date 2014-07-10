@@ -62,6 +62,14 @@ func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.Publi
 	return
 }
 
+func AcceptRequests(in <-chan *ssh.Request) {
+	for req := range in {
+		if req.WantReply {
+			req.Reply(true, nil)
+		}
+	}
+}
+
 func MultiCopyClose(s io.Reader, ds ...io.WriteCloser) (err error) {
 	var ws []io.Writer
 	for _, d := range ds {
