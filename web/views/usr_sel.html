@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>accounts of {{host.host}}</title>
+    <title>user managment</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,31 +13,29 @@
     % include("nav.html")
     <div class="container">
       % from bottle import request
-      % session = request.environ.get('beaker.session')
-      % if 'admin' in session['perms']:
-      <a href="/acct/{{host.id}}/add">add</a>
-      % end
-      <table class="table table-striped table-condensed">
-        <thead>
-	  <tr>
-	    <td>account</td><td>key</td><td>actions</td>
-	  </tr>
-	</thead>
-	<tbody>
-	  % for acct in accounts:
-	  <tr>
-	    <td>{{acct.account}}</td>
-	    <td>{{'yes' if acct.key else 'no'}}</td>
-	    <td>
-	      % if 'admin' in session['perms']:
-	      <a href="/acct/{{acct.id}}/edit">edit</a>
-	      <a href="/acct/{{acct.id}}/rem">del</a>
-	      % end
-	    </td>
-	  </tr>
-	  % end
-	</tbody>
-      </table>
+      <form method="POST">
+	<table class="table table-striped table-condensed">
+          <thead>
+	    <tr>
+	      <td>select</td>
+	      <td>name</td><td>email</td><td>pubkeys</td><td>perms</td>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    % for user in users:
+	    <tr>
+	      <td><input type="checkbox" name="users" {{'checked="yes"' if user.username in selected else ''}} value="{{user.username}}"/></td>
+	      <td>{{user.username}}</a></td>
+	      <td>{{user.email or ''}}</td>
+	      <td>{{len(user.pubkeys)}}</td>
+	      <td>{{user.perms}}</td>
+	    </tr>
+	    % end
+	  </tbody>
+	</table>
+	% include("page.html", page=page, pagemax=pagemax)
+        <button class="btn btn-primary" type="submit">Submit</button>
+      </form>
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>

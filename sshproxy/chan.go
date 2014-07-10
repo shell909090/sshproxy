@@ -305,8 +305,9 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 		go MultiCopyClose(chin, chout)
 		go MultiCopyClose(chout, chin, CreateScpStream(chi))
 	default:
-		// FIXME:
 		log.Warning("redirect before setup")
+		chin.Close()
+		chout.Close()
 	}
 	return
 }

@@ -41,7 +41,7 @@ def _logout(session):
     return bottle.redirect(request.query.next or '/')
 
 @route('/usr/')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _list(session):
     users = sess.query(Users)
     q = request.query.q
@@ -51,25 +51,25 @@ def _list(session):
     return utils.paged_template('usr.html', _users=users)
 
 @route('/usr/select')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _select(session):
     users = sess.query(Users).order_by(Users.username)
     return utils.paged_template(
-        'usr.html', _users=users, selected=set(session.pop('selected')))
+        'usr_sel.html', _users=users, selected=set(session.pop('selected')))
 
 @route('/usr/select', method='POST')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _select(session):
     session['selected'] = request.forms.getall('users')
     return bottle.redirect(request.query.next or '/')
 
 @route('/usr/add')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _add(session):
     return template('usr_edit.html', user=Users(perms=""))
 
 @route('/usr/add', method='POST')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _add(session):
     username = request.forms.get('username')
     user = sess.query(Users).filter_by(username=username).scalar()
@@ -95,7 +95,7 @@ def _add(session):
     return bottle.redirect('/usr/')
 
 @route('/usr/<username>/edit')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _edit(session, username):
     user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
@@ -103,7 +103,7 @@ def _edit(session, username):
     return template('usr_edit.html', user=user)
 
 @route('/usr/<username>/edit', method="POST")
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _edit(session, username):
     user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
@@ -144,7 +144,6 @@ def _edit(session):
             'usr_edit.html', user=user, editself=True,
             errmsg="user not exist")
 
-    # FIXME: time limit
     password_old = request.forms.get('password_old')
     if check_pass(password_old, user.password):
         return template(
@@ -169,7 +168,7 @@ def _edit(session):
     return bottle.redirect('/usr/')
 
 @route('/usr/<username>/rem')
-@utils.chklogin('users')
+@utils.chklogin('admin')
 def _remove(session, username):
     user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
@@ -185,14 +184,6 @@ def _list(session):
     logger.debug("username: %s" % session['username'])
     pubkeys = sess.query(Pubkeys).filter_by(username=session['username'])
     return template('pubk.html', pubkeys=pubkeys)
-
-@route('/pubk/query')
-@utils.chklocal
-def _query():
-    pubk = sess.query(Pubkeys).filter_by(pubkey=request.query.pubkey).scalar()
-    if not pubk:
-        return {'errmsg': 'pubkey not exist.'}
-    return {'name': pubk.name, 'username': pubk.username}
 
 @route('/pubk/add')
 @utils.chklogin()

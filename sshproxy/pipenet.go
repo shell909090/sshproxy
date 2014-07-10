@@ -1,8 +1,12 @@
 package sshproxy
 
 import (
+	"bytes"
+	"code.google.com/p/go.crypto/ssh"
+	"fmt"
 	"io"
 	"net"
+	"text/template"
 	"time"
 )
 
@@ -64,4 +68,53 @@ func (pn *PipeNet) SetReadDeadline(t time.Time) error {
 
 func (pn *PipeNet) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+func createPipeNet(client *ssh.Client, cmd string) (pn *PipeNet, err error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return
+	}
+
+	pn = &PipeNet{
+		wa:   session,
+		c:    client,
+		name: "ssh",
+	}
+
+	pn.w, err = session.StdinPipe()
+	if err != nil {
+		return
+	}
+	pn.r, err = session.StdoutPipe()
+	if err != nil {
+		return
+	}
+
+	err = session.Start(cmd)
+	return
+}
+
+func fmtCmd(proxycommand, desthost string, destport int) (cmd string, err error) {
+	if proxycommand != "" {
+		tmpl, err := template.New("test").Parse(proxycommand)
+		if err != nil {
+			return "", err
+		}
+
+		parameter := map[string]interface{}{
+			"host": desthost,
+			"port": destport,
+		}
+
+		buf := bytes.NewBuffer(nil)
+		err = tmpl.Execute(buf, parameter)
+		if err != nil {
+			return "", err
+		}
+		cmd = buf.String()
+	} else {
+		cmd = fmt.Sprintf("nc %s %d", desthost, destport)
+	}
+	return
 }

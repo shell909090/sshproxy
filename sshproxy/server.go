@@ -13,10 +13,6 @@ import (
 	"sync"
 )
 
-type SshConnServer interface {
-	Serve(ssh.ServerConn, <-chan ssh.NewChannel, <-chan *ssh.Request) error
-}
-
 type WebConfig struct {
 	Listen  string
 	Hostkey string
@@ -29,12 +25,14 @@ type Server struct {
 	srvcfg  *ssh.ServerConfig
 	mu      sync.Mutex
 	scss    map[net.Addr]SshConnServer
+	cnt     *Counter
 }
 
 func CreateServer(webhost string) (srv *Server, err error) {
 	srv = &Server{
 		scss:    make(map[net.Addr]SshConnServer, 0),
 		webhost: webhost,
+		cnt:     CreateCounter(CONN_PROTECT),
 	}
 	srv.srvcfg = &ssh.ServerConfig{
 		PublicKeyCallback: srv.authUser,
@@ -47,8 +45,9 @@ func CreateServer(webhost string) (srv *Server, err error) {
 	}
 	log.Debug("config: %#v", srv.WebConfig)
 
-	private, err := LoadPrivateKey(srv.WebConfig.Hostkey)
+	private, err := ssh.ParsePrivateKey([]byte(srv.WebConfig.Hostkey))
 	if err != nil {
+		log.Error("failed to parse keyfile: %s", err.Error())
 		return
 	}
 	srv.srvcfg.AddHostKey(private)
@@ -84,7 +83,6 @@ func (srv *Server) GetJson(base string, post bool, v *url.Values, obj interface{
 		log.Error("decode json failed: %s", err.Error())
 		return
 	}
-	log.Debug("%#v", obj)
 	return
 }
 
@@ -101,10 +99,22 @@ func (srv *Server) getConnInfo(remote net.Addr) (scs SshConnServer, err error) {
 	return
 }
 
-func (srv *Server) serveConn(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) {
-	defer srvConn.Close()
+func (srv *Server) closeConn(remote net.Addr) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	delete(srv.scss, remote)
+}
 
-	remote := srvConn.RemoteAddr()
+func (srv *Server) serveConn(nConn net.Conn) {
+	conn, chans, reqs, err := ssh.NewServerConn(nConn, srv.srvcfg)
+	if err != nil {
+		log.Error("failed to handshake: %s", err.Error())
+		srv.Failed(nConn.RemoteAddr())
+		return
+	}
+	defer conn.Close()
+
+	remote := nConn.RemoteAddr()
 	scs, err := srv.getConnInfo(remote)
 	if err != nil {
 		log.Error("%s", err.Error())
@@ -112,17 +122,11 @@ func (srv *Server) serveConn(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChan
 	}
 	defer srv.closeConn(remote)
 
-	err = scs.Serve(srvConn, srvChans, srvReqs)
+	err = scs.Serve(conn, chans, reqs)
 	if err != nil {
 		log.Error("%s", err.Error())
-		return
 	}
-}
-
-func (srv *Server) closeConn(remote net.Addr) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	delete(srv.scss, remote)
+	return
 }
 
 func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
@@ -182,7 +186,27 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 	return
 }
 
-// FIXME: time limit
+func (srv *Server) Protect(addr net.Addr) (err error) {
+	taddr, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return
+	}
+	s := string(taddr.IP)
+	if srv.cnt.Number(s) > MAX_FAILED {
+		return ErrFailedTooMany
+	}
+	return
+}
+
+func (srv *Server) Failed(addr net.Addr) {
+	taddr, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return
+	}
+	s := string(taddr.IP)
+	srv.cnt.Add(s, 1)
+}
+
 func (srv *Server) MainLoop() {
 	listener, err := net.Listen("tcp", srv.WebConfig.Listen)
 	if err != nil {
@@ -196,13 +220,14 @@ func (srv *Server) MainLoop() {
 			log.Error("failed to accept incoming connection: %s", err.Error())
 			continue
 		}
-		log.Debug("net connect coming.")
-
-		conn, chans, reqs, err := ssh.NewServerConn(nConn, srv.srvcfg)
+		err = srv.Protect(nConn.RemoteAddr())
 		if err != nil {
-			log.Error("failed to handshake: %s", err.Error())
+			log.Warning("refused to connect with %s for too much failed.",
+				nConn.RemoteAddr().String())
 			continue
 		}
-		go srv.serveConn(*conn, chans, reqs)
+		log.Debug("net connect coming.")
+
+		go srv.serveConn(nConn)
 	}
 }

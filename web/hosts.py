@@ -25,44 +25,13 @@ def _list(session):
     hosts = hosts.order_by(Hosts.id)
     return utils.paged_template('hosts.html', _hosts=hosts)
 
-def acct_dict(acct):
-    return {'hostid': acct.host.id, 'hostname': acct.host.hostname,
-            'port': acct.host.port, 'hostkey': acct.host.hostkeys,
-            'accountid': acct.id, 'account': acct.account,
-            'key': acct.key, 'password': acct.password}
-
-@route('/h/query')
-@utils.chklocal
-@utils.jsonenc
-def _query():
-    username = request.query.get('username')
-    account = request.query.get('account')
-    host = request.query.get('host')
-    if not (username and account and host):
-        return {'errmsg': 'username or account or host is empty.'}
-
-    user = sess.query(Users).filter_by(username=username).scalar()
-    if not user:
-        return {'errmsg': 'user not exist.'}
-    acct = sess.query(Accounts).filter_by(account=account).\
-        join(Accounts.host).filter_by(host=host).scalar()
-    if not acct:
-        return {'errmsg': 'account not exist.'}
-
-    r = acct_dict(acct)
-    r['perms'] = cal_group(user, acct)
-    if acct.host.proxy:
-        r['proxy'] = acct_dict(acct.host.proxy)
-        r['proxycommand'] = acct.host.proxycommand
-    return r
-
 @route('/h/add')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _add(session):
     return template('hosts_edit.html', host=Hosts())
 
 @route('/h/add', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _add(session):
     h = request.forms.get('host')
     host = sess.query(Hosts).filter_by(host=h).scalar()
@@ -92,7 +61,7 @@ def _add(session):
     return bottle.redirect('/h/')
 
 @route('/h/<id:int>/edit')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _edit(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -100,7 +69,7 @@ def _edit(session, id):
     return template('hosts_edit.html', host=host)
 
 @route('/h/<id:int>/edit', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _edit(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -126,7 +95,7 @@ def _edit(session, id):
     return bottle.redirect('/h/')
 
 @route('/h/<id:int>/rem')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _remove(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -137,7 +106,7 @@ def _remove(session, id):
     return bottle.redirect('/h/')
 
 @route('/h/<id:int>/renew')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _renew_hostkey(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -150,7 +119,7 @@ def _renew_hostkey(session, id):
     return template('hosts_key.html', hostkeys=hostkeys, fps=fps)
 
 @route('/h/<id:int>/renew', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _renew_hostkey(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -162,20 +131,20 @@ def _renew_hostkey(session, id):
     return bottle.redirect('/h/')
 
 @route('/acct/select')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _select(session):
     hosts = sess.query(Hosts).order_by(Hosts.id)
     return utils.paged_template(
         'acct_sel.html', _hosts=hosts, selected=set(session.pop('selected')))
 
 @route('/acct/select', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _select(session):
     session['selected'] = request.forms.getall('accts')
     return bottle.redirect(request.query.next or '/')
 
 @route('/acct/<id:int>')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _list(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -184,7 +153,7 @@ def _list(session, id):
     return template('acct.html', accounts=accounts, host=host)
 
 @route('/acct/<id:int>/add')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _add(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -192,7 +161,7 @@ def _add(session, id):
     return template('acct_edit.html', acct=Accounts(hostid=id), host=host)
 
 @route('/acct/<id:int>/add', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _add(session, id):
     host = sess.query(Hosts).filter_by(id=id).scalar()
     if not host:
@@ -207,15 +176,15 @@ def _add(session, id):
 
     utils.log(logger, 'add account: %s' % account)
     acct = Accounts(
-        account=account, host=host,
-        key=request.forms.get('key'))
+        account=account, host=host, key=request.forms.get('key'),
+        password=request.forms.get('password'))
     sess.add(acct)
 
     sess.commit()
     return bottle.redirect('/acct/%d' % id)
 
 @route('/acct/<id:int>/edit')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _edit(session, id):
     acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:
@@ -223,22 +192,22 @@ def _edit(session, id):
     return template('acct_edit.html', acct=acct, host=acct.host)
 
 @route('/acct/<id:int>/edit', method='POST')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _edit(session, id):
     acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:
         return 'acct not exist.'
 
     utils.log(logger, 'edit account: %s@%s' % (acct.account, acct.host.host))
-    if request.forms.get('account'):
-        acct.account = request.forms.get('account')
-    if request.forms.get('key'):
-        acct.key = request.forms.get('key')
+    if 'account' in request.forms: acct.account = request.forms.get('account')
+    if 'key' in request.forms: acct.key = request.forms.get('key')
+    if 'password' in request.forms: acct.password = request.forms.get('password')
+
     sess.commit()
     return bottle.redirect('/acct/%d' % int(acct.hostid))
 
 @route('/acct/<id:int>/rem')
-@utils.chklogin('hosts')
+@utils.chklogin('admin')
 def _remove(session, id):
     acct = sess.query(Accounts).filter_by(id=id).scalar()
     if not acct:

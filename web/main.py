@@ -38,14 +38,7 @@ application = SessionMiddleware(app, session_opts)
 def _static(filename):
     return bottle.static_file(filename, root='static/')
 
-@bottle.route('/cfg')
-@utils.chklocal
-@utils.jsonenc
-def _config():
-    return dict([(k[6:], v) for k, v in app.config.iteritems()
-                 if k.startswith('proxy.')])
-
-import users, hosts, groups, records
+import users, hosts, groups, records, local
 
 def main():
     if '-h' in optdict:

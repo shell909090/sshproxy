@@ -9,12 +9,10 @@ TARGET=bin/sshproxy
 
 build: $(TARGET)
 
-clean:
-	rm -f $(TARGET)
-
-cleandb:
-	rm -f ssh.db
-	rm -rf logs
+bin/sshproxy:
+	mkdir -p bin
+	go build -o $@ github.com/shell909090/sshproxy/main
+	strip $@
 
 run: build ssh.db
 	bin/sshproxy -config config.json
@@ -22,16 +20,16 @@ run: build ssh.db
 runweb:
 	cd web; python main.py
 
-bin/sshproxy:
-	mkdir -p bin
-	go build -o $@ github.com/shell909090/sshproxy/main
-	strip $@
+clean:
+	rm -f $(TARGET)
 
 ssh.db:
 	mkdir -p logs
 	cd web; python db.py -b
-	cd web; python db.py -x shell ~/.ssh/authorized_keys
-	cd web; python db.py -m localhost localhost
-	cd web; python db.py -p shell@localhost ~/.ssh/id_rsa
+	cd web; python db.py -x shell 123 ~/.ssh/authorized_keys
+
+cleandb:
+	rm -f ssh.db
+	rm -rf logs
 
 ### Makefile ends here

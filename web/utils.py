@@ -38,20 +38,13 @@ def chklogin(perm=None, next=None):
         return _inner
     return receiver
 
-def chklocal(func):
-    def _inner(*p, **kw):
-        ip = request.remote_route[0] if request.remote_route else request.remote_addr
-        if not ip.startswith('127.0.0'): return 'sorry'
-        return func(*p, **kw)
-    return _inner
-
 def jsonenc(func):
     def _inner(*p, **kw):
         try: r = func(*p, **kw)
         except Exception, err:
             r = {'errmsg': str(err)}
         r = json.dumps(r)
-        logger.debug(r)
+        # logger.debug(r)
         return r
     return _inner
 

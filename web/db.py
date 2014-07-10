@@ -20,7 +20,7 @@ __all__ = [
 
 Base = declarative_base()
 
-ALLRULES = ['admin', 'users', 'hosts', 'groups', 'audit']
+ALLRULES = ['admin', 'audit']
 PERMS = ['shell', 'scpfrom', 'scpto', 'tcp', 'agent']
 
 addx = lambda c: lambda x: c + x
@@ -34,9 +34,9 @@ def check_pass(p, h):
 
 class Users(Base):
     __tablename__ = 'users'
-    username = Column(String, primary_key=True)
+    username = Column(String(40), primary_key=True)
     password = Column(String, nullable=False)
-    deleted = Column(Boolean)
+    email = Column(String)
     pubkeys = relationship("Pubkeys", backref='user')
     perms = Column(String, nullable=False)
 
@@ -94,6 +94,8 @@ class Groups(Base):
     users = relationship("Users", backref='groups', secondary=user_group)
     accounts = relationship("Accounts", backref='groups', secondary=account_group)
     perms = Column(String)
+    after = Column(String)
+    before = Column(String)
 
 class Records(Base):
     __tablename__ = 'records'
@@ -119,7 +121,7 @@ class AuditLogs(Base):
     __tablename__ = 'auditlogs'
     id = Column(Integer, primary_key=True)
     time = Column(DateTime, server_default=sqlalchemy.text('CURRENT_TIMESTAMP'))
-    username = Column(String, ForeignKey('users.username'))
+    username = Column(String)
     level = Column(Integer)
     log = Column(String)
 
@@ -144,7 +146,7 @@ def cal_group(user, acct):
 
 def main():
     import getopt, subprocess, ConfigParser
-    optlist, args = getopt.getopt(sys.argv[1:], 'bc:hmp:x:')
+    optlist, args = getopt.getopt(sys.argv[1:], 'bc:hx')
     optdict = dict(optlist)
     if '-h' in optdict:
         print main.__doc__
@@ -157,29 +159,18 @@ def main():
 
     if '-b' in optdict:
         Base.metadata.create_all(engine)
-        sess.add(Users(
-            username='shell', password=crypto_pass('123'),
-            perms=','.join(ALLRULES)))
 
     # import pubkey for user
     if '-x' in optdict:
-        u = sess.query(Users).filter_by(username=optdict['-x']).one()
-        with open(args[0], 'rb') as fi:
-            for line in fi:
-                pubkey, name = line.strip().split()[1:]
-                sess.add(Pubkeys(name=name, user=u, pubkey=pubkey))
-
-    # create host and import hostkey
-    if '-m' in optdict:
-        hostkeys = subprocess.check_output(["ssh-keyscan", "-t", "rsa,dsa,ecdsa", args[1]])
-        sess.add(Hosts(host=args[0], hostname=args[1], port=22, hostkeys=hostkeys))
-
-    # import private key and create account
-    if '-p' in optdict:
-        account, h = optdict['-p'].split('@')
-        host = sess.query(Hosts).filter_by(host=h).one()
-        with open(args[0], 'rb') as fi: prikey = fi.read()
-        sess.add(Accounts(account=account, host=host, key=prikey))
+        u = Users(
+            username=args[0], password=crypto_pass(args[1]),
+            perms=','.join(ALLRULES))
+        sess.add(u)
+        for fn in args[2:]:
+            with open(fn, 'rb') as fi:
+                for line in fi:
+                    pubkey, name = line.strip().split()[1:]
+                    sess.add(Pubkeys(name=name, user=u, pubkey=pubkey))
 
     sess.commit()
 

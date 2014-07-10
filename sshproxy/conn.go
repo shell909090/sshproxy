@@ -1,31 +1,27 @@
 package sshproxy
 
 import (
-	"bytes"
 	"code.google.com/p/go.crypto/ssh"
-	"database/sql"
 	"fmt"
 	"net"
 	"net/url"
 	"sync"
-	"text/template"
 	"time"
 )
 
 type ConnInfo struct {
-	srv *Server
-	db  *sql.DB
-	wg  sync.WaitGroup
+	srv  *Server
+	wg   sync.WaitGroup
+	conn ssh.Conn
 
 	Username string
+	Host     string
+	Account  string
 
-	Host         string
-	Account      string
 	Acct         *AccountInfo
 	Proxy        *AccountInfo
 	ProxyCommand string
-
-	Perms map[string]int
+	Perms        map[string]int
 
 	RecordId  int
 	Starttime time.Time
@@ -43,6 +39,9 @@ func (srv *Server) createSshConnServer(username, account, host string) (scs SshC
 	err = ci.loadAccount()
 	if err != nil {
 		return
+	}
+	if len(ci.Perms) == 0 {
+		return nil, ErrNoPerms
 	}
 
 	err = ci.insertRecord()
@@ -83,6 +82,10 @@ func (ci *ConnInfo) loadAccount() (err error) {
 		ci.Perms[p] = 1
 	}
 	return
+}
+
+func (ci *ConnInfo) Close() (err error) {
+	return ci.conn.Close()
 }
 
 func (ci *ConnInfo) ChkPerm(name string) (ok bool) {
@@ -149,55 +152,6 @@ func (ci *ConnInfo) clientBuilder() (client ssh.Conn, chans <-chan ssh.NewChanne
 	return
 }
 
-func (ci *ConnInfo) getNet(client *ssh.Client, cmd string) (pn *PipeNet, err error) {
-	session, err := client.NewSession()
-	if err != nil {
-		return
-	}
-
-	pn = &PipeNet{
-		wa:   session,
-		c:    client,
-		name: "ssh",
-	}
-
-	pn.w, err = session.StdinPipe()
-	if err != nil {
-		return
-	}
-	pn.r, err = session.StdoutPipe()
-	if err != nil {
-		return
-	}
-
-	err = session.Start(cmd)
-	return
-}
-
-func (ci *ConnInfo) fmtCmd(desthost string, destport int) (cmd string, err error) {
-	if ci.ProxyCommand != "" {
-		tmpl, err := template.New("test").Parse(ci.ProxyCommand)
-		if err != nil {
-			return "", err
-		}
-
-		parameter := map[string]interface{}{
-			"host": desthost,
-			"port": destport,
-		}
-
-		buf := bytes.NewBuffer(nil)
-		err = tmpl.Execute(buf, parameter)
-		if err != nil {
-			return "", err
-		}
-		cmd = buf.String()
-	} else {
-		cmd = fmt.Sprintf("nc %s %d", desthost, destport)
-	}
-	return
-}
-
 func (ci *ConnInfo) connectProxy(desthost string, destport int) (conn net.Conn, err error) {
 	config, err := ci.Proxy.ClientConfig()
 	if err != nil {
@@ -211,14 +165,13 @@ func (ci *ConnInfo) connectProxy(desthost string, destport int) (conn net.Conn, 
 		return
 	}
 
-	cmd, err := ci.fmtCmd(desthost, destport)
+	cmd, err := fmtCmd(ci.ProxyCommand, desthost, destport)
 	if err != nil {
 		return
 	}
 	log.Debug("cmd: %s", cmd)
 
-	conn, err = ci.getNet(client, cmd)
-	return
+	return createPipeNet(client, cmd)
 }
 
 func (ci *ConnInfo) serveReq(conn ssh.Conn, req *ssh.Request) (err error) {
@@ -268,19 +221,20 @@ func (ci *ConnInfo) serveChans(conn ssh.Conn, chans <-chan ssh.NewChannel) (err 
 	return
 }
 
-func (ci *ConnInfo) Serve(srvConn ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) (err error) {
-	cliConn, cliChans, cliReqs, err := ci.clientBuilder()
+func (ci *ConnInfo) Serve(srvConn *ssh.ServerConn, srvChans <-chan ssh.NewChannel, srvReqs <-chan *ssh.Request) (err error) {
+	conn, cliChans, cliReqs, err := ci.clientBuilder()
 	if err != nil {
 		return
 	}
-	defer cliConn.Close()
+	defer conn.Close()
+	ci.conn = conn
 
 	log.Debug("handshake ok")
 
 	ci.wg.Add(4)
-	go ci.serveReqs(cliConn, srvReqs)
+	go ci.serveReqs(ci.conn, srvReqs)
 	go ci.serveReqs(srvConn, cliReqs)
-	go ci.serveChans(cliConn, srvChans)
+	go ci.serveChans(ci.conn, srvChans)
 	go ci.serveChans(srvConn, cliChans)
 	ci.wg.Wait()
 

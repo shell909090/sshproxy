@@ -14,31 +14,31 @@ app = bottle.default_app()
 sess = app.config['db.session']
 
 @route('/grp/')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _list(session):
     groups = sess.query(Groups).order_by(Groups.id)
     return utils.paged_template('grp.html', _groups=groups)
 
 @route('/grp/select')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _select(session):
     groups = sess.query(Groups).order_by(Groups.id)
     return utils.paged_template(
         'grp.html', _groups=groups, selected=set(session.pop('selected')))
 
 @route('/grp/select', method='POST')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _select(session):
     session['selected'] = request.forms.getall('groups')
     return bottle.redirect(request.query.next or '/')
 
 @route('/grp/add')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _add(session):
     return template('grp_edit.html', group=Groups(perms=''))
 
 @route('/grp/add', method="POST")
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _add(session):
     name = request.forms.name
     group = sess.query(Groups).filter_by(name=name).scalar()
@@ -56,7 +56,7 @@ def _add(session):
     return bottle.redirect('/grp/')
 
 @route('/grp/<id:int>/edit')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _edit(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -64,7 +64,7 @@ def _edit(session, id):
     return template('grp_edit.html', group=group)
 
 @route('/grp/<id:int>/edit', method='POST')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _edit(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -81,7 +81,7 @@ def _edit(session, id):
     return bottle.redirect('/grp/')
 
 @route('/grp/<id:int>/usrs')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _associated(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -113,7 +113,7 @@ def _associated(session, id):
     return bottle.redirect('/grp/')
 
 @route('/grp/<id:int>/accts')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _associated(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -145,7 +145,7 @@ def _associated(session, id):
     return bottle.redirect('/grp/')
 
 @route('/grp/<id:int>/grp')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _associated(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -180,7 +180,7 @@ def _associated(session, id):
     return bottle.redirect('/grp/')
 
 @route('/grp/<id:int>/rem')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _remove(session, id):
     group = sess.query(Groups).filter_by(id=id).scalar()
     if not group:
@@ -192,7 +192,7 @@ def _remove(session, id):
     return bottle.redirect('/grp/')
 
 @route('/grp/cal')
-@utils.chklogin('groups')
+@utils.chklogin('admin')
 def _calculus(session):
     username = request.query.get('username')
     account = request.query.get('account')
@@ -202,10 +202,10 @@ def _calculus(session):
 
     user = sess.query(Users).filter_by(username=username).scalar()
     if not user:
-        return template('cal.html', errmeg='user not found')
+        return template('cal.html', errmsg='user not found')
     acct = sess.query(Accounts).filter_by(account=account).join(Accounts.host).filter_by(host=host).scalar()
-    if not user:
-        return template('cal.html', errmeg='account not found')
+    if not acct:
+        return template('cal.html', errmsg='account not found')
 
     perms = cal_group(user, acct)
     return template('cal.html', perms=perms)

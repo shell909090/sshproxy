@@ -7,8 +7,9 @@ import (
 	"errors"
 	"github.com/op/go-logging"
 	"io"
-	"io/ioutil"
 	"net"
+	"sync"
+	"time"
 )
 
 var (
@@ -20,25 +21,15 @@ var (
 	ErrSCSNotFound          = errors.New("ssh conn server not found")
 	ErrHostKey              = errors.New("host key not match")
 	ErrNoPerms              = errors.New("no perms")
+	ErrFailedTooMany        = errors.New("banned because failed too many times")
+)
+
+var (
+	CONN_PROTECT = 300 * time.Second
+	MAX_FAILED   = 3
 )
 
 var log = logging.MustGetLogger("")
-
-func LoadPrivateKey(filename string) (private ssh.Signer, err error) {
-	log.Info("load private key: %s", filename)
-
-	privateBytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Error("failed to load keyfile: %s", err.Error())
-		return
-	}
-	private, err = ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		log.Error("failed to parse keyfile: %s", err.Error())
-		return
-	}
-	return
-}
 
 func CheckHostKey(HostKey string) (checkHostKey func(string, net.Addr, ssh.PublicKey) error) {
 	var err error
@@ -139,6 +130,60 @@ func (ds *DebugStream) Write(p []byte) (n int, err error) {
 
 func (ds *DebugStream) Close() error {
 	return nil
+}
+
+type SshConnServer interface {
+	Serve(*ssh.ServerConn, <-chan ssh.NewChannel, <-chan *ssh.Request) error
+}
+
+type Counter struct {
+	mu sync.Mutex
+	cm map[string]int
+	d  time.Duration
+}
+
+func CreateCounter(d time.Duration) (c *Counter) {
+	return &Counter{
+		cm: make(map[string]int, 0),
+		d:  d,
+	}
+}
+
+func (c *Counter) Add(s string, n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i, ok := c.cm[s]
+	if !ok {
+		i = 0
+	}
+	i += n
+	c.cm[s] = i
+	time.AfterFunc(c.d, func() { c.Remove(s, n) })
+}
+
+func (c *Counter) Remove(s string, n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i, ok := c.cm[s]
+	if !ok {
+		return
+	}
+	i -= n
+	if i <= 0 {
+		delete(c.cm, s)
+	} else {
+		c.cm[s] = i
+	}
+}
+
+func (c *Counter) Number(s string) (i int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i, ok := c.cm[s]
+	if !ok {
+		return 0
+	}
+	return
 }
 
 type AccountInfo struct {
