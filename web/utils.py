@@ -11,7 +11,7 @@ from db import *
 
 logger = logging.getLogger('utils')
 app = bottle.default_app()
-sess = app.config['db.session']
+sess = app.config.get('db.session')
 
 LOGFMT = '%(asctime)s.%(msecs)03d[%(levelname)s](%(module)s:%(lineno)d): %(message)s'
 def initlog(lv, logfile=None, stream=None, longdate=False):

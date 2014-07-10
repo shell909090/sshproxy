@@ -4,7 +4,7 @@
 @date: 2014-07-02
 @author: shell.xu
 '''
-import os, sys, logging
+import os, sys, time, struct, logging
 from os import path
 import bottle, utils
 from bottle import route, template, request
@@ -12,7 +12,7 @@ from db import *
 
 logger = logging.getLogger('records')
 app = bottle.default_app()
-sess = app.config['db.session']
+sess = app.config.get('db.session')
 
 def guess_datetime(s):
     return
@@ -72,6 +72,17 @@ def _show(session, id):
     sess.commit()
     return utils.paged_template('rec.html', _reclogs=reclogs)
 
+header = struct.Struct('BB')
+def read_sublog(s, b):
+    while True:
+        d = s.read(2)
+        if not d: return
+        t, l = header.unpack(d)
+        d = s.read(l)
+        if b != t: continue
+        yield d
+        time.sleep(0.2)
+
 @route('/rlog/<id:int>')
 @utils.chklogin('audit')
 def _show(session, id):
@@ -81,15 +92,12 @@ def _show(session, id):
         return
     filepath = path.join(
         app.config.get('file.basedir'),
-        reclog.rec.starttime.strftime('%Y%m%d'), '%d.out' % reclog.id)
+        reclog.rec.starttime.strftime('%Y%m%d'), '%d.rec' % reclog.id)
     utils.log(logger, 'view sess id: %d, start: %s.' % (
         reclog.id, reclog.time.strftime('%Y%m%d %H:%M:%S')))
     sess.commit()
     with open(filepath, 'rb') as fi:
-        d = fi.read(1024)
-        while d:
-            yield d
-            d = fi.read(1024)
+        for d in read_sublog(fi, 2): yield d
 
 @route('/adt/')
 @utils.chklogin('audit')

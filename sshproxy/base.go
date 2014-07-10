@@ -25,8 +25,9 @@ var (
 )
 
 var (
-	CONN_PROTECT = 300 * time.Second
-	MAX_FAILED   = 3
+	CONN_PROTECT  = 300 * time.Second
+	MAX_FAILED    = 3
+	QUANTUM_SLICE = 200 * time.Millisecond
 )
 
 var log = logging.MustGetLogger("")

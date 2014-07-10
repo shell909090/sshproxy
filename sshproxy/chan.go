@@ -3,9 +3,7 @@ package sshproxy
 import (
 	"code.google.com/p/go.crypto/ssh"
 	"fmt"
-	"io"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -45,23 +43,6 @@ func (chi *ChanInfo) insertRecordLogs(rltype, log1, log2 string, num1 int) (id i
 		return
 	}
 	id = rslt.Id
-	return
-}
-
-func (chi *ChanInfo) prepareFile(ext, cmd string) (w io.WriteCloser, err error) {
-	logDir := fmt.Sprintf("%s/%s", chi.ci.srv.WebConfig.Logdir, chi.ci.Starttime.Format("20060102"))
-	err = os.MkdirAll(logDir, 0755)
-	if err != nil {
-		return
-	}
-
-	chi.RecordLogsId, err = chi.insertRecordLogs(chi.Type, cmd, "", 0)
-	if err != nil {
-		return
-	}
-
-	w, err = os.OpenFile(fmt.Sprintf("%s/%d.%s", logDir, chi.RecordLogsId, ext),
-		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	return
 }
 
@@ -204,6 +185,14 @@ func (chi *ChanInfo) onType(chantype string, extra []byte) (err error) {
 	return
 }
 
+func (chi *ChanInfo) prepareFile(cmd string) (l *Logger, err error) {
+	chi.RecordLogsId, err = chi.insertRecordLogs(chi.Type, cmd, "", 0)
+	if err != nil {
+		return
+	}
+	return CreateLogger(chi.ci.srv.WebConfig.Logdir, chi.ci.Starttime, chi.RecordLogsId)
+}
+
 func (chi *ChanInfo) serveReq(ch ssh.Channel, req *ssh.Request) (err error) {
 	err = chi.onReq(req)
 	if err != nil {
@@ -285,19 +274,19 @@ func (chi *ChanInfo) Serve(conn ssh.Conn, newChan ssh.NewChannel) (err error) {
 		go MultiCopyClose(chin, chout, &DebugStream{"out"})
 		go MultiCopyClose(chout, chin, &DebugStream{"in"})
 	case "shell":
-		out, err := chi.prepareFile("out", "")
+		l, err := chi.prepareFile("")
 		if err != nil {
 			return err
 		}
-		go MultiCopyClose(chin, chout)
-		go MultiCopyClose(chout, chin, out)
+		go MultiCopyClose(chin, chout, l.CreateSubLogger(byte(0x01)))
+		go MultiCopyClose(chout, chin, l.CreateSubLogger(byte(0x02)))
 	case "exec":
-		out, err := chi.prepareFile("out", strings.Join(chi.ExecCmds, "\r"))
+		l, err := chi.prepareFile(strings.Join(chi.ExecCmds, "\r"))
 		if err != nil {
 			return err
 		}
-		go MultiCopyClose(chin, chout)
-		go MultiCopyClose(chout, chin, out)
+		go MultiCopyClose(chin, chout, l.CreateSubLogger(byte(0x01)))
+		go MultiCopyClose(chout, chin, l.CreateSubLogger(byte(0x02)))
 	case "scpto":
 		go MultiCopyClose(chin, chout, CreateScpStream(chi))
 		go MultiCopyClose(chout, chin)

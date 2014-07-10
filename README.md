@@ -17,7 +17,8 @@ proxy server for ssh
 
 # TODO
 
-* shell session综合保存在同一个文件中
+* 终端浏览记录
+* web浏览记录
 * group介于时间内生效
 * 权限缓存和清除
 * show replay
