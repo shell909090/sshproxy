@@ -14,14 +14,13 @@ proxy server for ssh
 * ssh proxy host跳板连接
 * 用户/主机/账户管理
 * ACL模型权限管理
+* 终端浏览记录
 
 # TODO
 
-* 终端浏览记录
 * web浏览记录
 * group介于时间内生效
 * 权限缓存和清除
-* show replay
 * 反向索引
 * 敏感字断开
 * remote port mapping，不知为何无法成功

@@ -20,7 +20,7 @@ def chklocal(func):
         return func(*p, **kw)
     return _inner
 
-@bottle.route('/cfg')
+@bottle.route('/l/cfg')
 @chklocal
 @utils.jsonenc
 def _config():
@@ -29,7 +29,7 @@ def _config():
     with open(r['hostkey'], 'rb') as fi: r['hostkey'] = fi.read()
     return r
 
-@route('/pubk/query')
+@route('/l/pubk')
 @chklocal
 def _query():
     pubk = sess.query(Pubkeys).filter_by(pubkey=request.query.pubkey).scalar()
@@ -43,14 +43,14 @@ def acct_dict(acct):
             'accountid': acct.id, 'account': acct.account,
             'key': acct.key, 'password': acct.password}
 
-@route('/h/query')
+@route('/l/h')
 @chklocal
 @utils.jsonenc
 def _query():
     username = request.query.get('username')
     account = request.query.get('account')
     host = request.query.get('host')
-    if not (username and account and host):
+    if not all([username, account, host]):
         return {'errmsg': 'username or account or host is empty.'}
 
     user = sess.query(Users).filter_by(username=username).scalar()
@@ -69,7 +69,7 @@ def _query():
     return r
 
 
-@route('/rec/add', method='POST')
+@route('/l/rec', method='POST')
 @chklocal
 @utils.jsonenc
 def _add():
@@ -83,7 +83,7 @@ def _add():
     sess.commit()
     return {'recordid': rec.id, 'starttime': rec.starttime.isoformat()}
 
-@route('/rec/end', method='POST')
+@route('/l/end', method='POST')
 @chklocal
 @utils.jsonenc
 def _end():
@@ -97,7 +97,7 @@ def _end():
     sess.commit()
     return
 
-@route('/rlog/add', method='POST')
+@route('/l/rlog', method='POST')
 @chklocal
 @utils.jsonenc
 def _add():
@@ -113,3 +113,29 @@ def _add():
     sess.add(rlog)
     sess.commit()
     return {'id': rlog.id}
+
+@route('/l/rev')
+@chklocal
+@utils.jsonenc
+def _review():
+    username = request.query.get('username')
+    reclogid = int(request.query.get('recordlogid'))
+    if not all([username, reclogid]):
+        return {'errmsg': 'username or reclogid is empty.'}
+
+    user = sess.query(Users).filter_by(username=username).scalar()
+    if not user:
+        return {'errmsg': 'user not exist.'}
+    reclog = sess.query(RecordLogs).filter_by(id=reclogid).scalar()
+    if not reclog:
+        return {'errmsg': 'reclog not exist.'}
+
+    r = {'access': 'audit' in user.perms.split(','),
+         'time': reclog.rec.starttime.isoformat()}
+    if not r['access']: return r
+
+    log = 'view sess id: %d' % reclogid
+    logger.info(log)
+    sess.add(AuditLogs(username=username, log=log))
+    sess.commit()
+    return r

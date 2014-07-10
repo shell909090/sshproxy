@@ -38,7 +38,7 @@ func (chi *ChanInfo) insertRecordLogs(rltype, log1, log2 string, num1 int) (id i
 	}
 	rslt := &RecordLogsRslt{}
 
-	err = chi.ci.srv.GetJson("/rlog/add", true, v, rslt)
+	err = chi.ci.srv.GetJson("/l/rlog", true, v, rslt)
 	if err != nil {
 		return
 	}

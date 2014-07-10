@@ -72,10 +72,10 @@ def _show(session, id):
     sess.commit()
     return utils.paged_template('rec.html', _reclogs=reclogs)
 
-header = struct.Struct('BB')
+header = struct.Struct('>BH')
 def read_sublog(s, b):
     while True:
-        d = s.read(2)
+        d = s.read(3)
         if not d: return
         t, l = header.unpack(d)
         d = s.read(l)
@@ -97,7 +97,8 @@ def _show(session, id):
         reclog.id, reclog.time.strftime('%Y%m%d %H:%M:%S')))
     sess.commit()
     with open(filepath, 'rb') as fi:
-        for d in read_sublog(fi, 2): yield d
+        for d in read_sublog(fi, 2):
+            yield d
 
 @route('/adt/')
 @utils.chklogin('audit')

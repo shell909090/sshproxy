@@ -44,7 +44,7 @@ def jsonenc(func):
         except Exception, err:
             r = {'errmsg': str(err)}
         r = json.dumps(r)
-        # logger.debug(r)
+        logger.debug(r)
         return r
     return _inner
 

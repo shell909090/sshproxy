@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -39,7 +40,7 @@ func CreateServer(webhost string) (srv *Server, err error) {
 	}
 
 	v := &url.Values{}
-	err = srv.GetJson("/cfg", false, v, &srv.WebConfig)
+	err = srv.GetJson("/l/cfg", false, v, &srv.WebConfig)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -129,6 +130,56 @@ func (srv *Server) serveConn(nConn net.Conn) {
 	return
 }
 
+func (srv *Server) createSshConnServer(username, remote, account, host string) (scs SshConnServer, err error) {
+	switch {
+	case host == "_":
+		log.Notice("user %s@%s wanna audit log %s", username, remote, account)
+
+		var id int
+		id, err = strconv.Atoi(account)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+
+		ri := &ReviewInfo{
+			srv:          srv,
+			Username:     username,
+			RecordLogsId: id,
+		}
+
+		err = ri.init()
+		if err != nil {
+			return
+		}
+
+		return ri, nil
+	default:
+		log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
+
+		ci := &ConnInfo{
+			srv:      srv,
+			Username: username,
+			Account:  account,
+			Host:     host,
+			Perms:    make(map[string]int, 0),
+		}
+
+		err = ci.loadAccount()
+		if err != nil {
+			return
+		}
+
+		err = ci.insertRecord()
+		if err != nil {
+			return
+		}
+
+		return ci, nil
+	}
+	return
+}
+
 func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
 	pubkey := base64.StdEncoding.EncodeToString(key.Marshal())
 	v := &url.Values{}
@@ -140,7 +191,7 @@ func (srv *Server) findPubkey(key ssh.PublicKey) (username string, err error) {
 	}
 	rslt := &PubkeyRslt{}
 
-	err = srv.GetJson("/pubk/query", false, v, rslt)
+	err = srv.GetJson("/l/pubk", false, v, rslt)
 	if err != nil {
 		return
 	}
@@ -172,14 +223,16 @@ func (srv *Server) authUser(meta ssh.ConnMetadata, key ssh.PublicKey) (perm *ssh
 		return
 	}
 
-	log.Notice("user %s@%s will connect %s@%s.", username, remote, account, host)
-	scs, err := srv.createSshConnServer(username, account, host)
+	scs, err := srv.createSshConnServer(username, remote.String(), account, host)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return
 	}
+	if scs == nil {
+		log.Error("can't create server")
+		return
+	}
 
-	// set user and host in meta.RemoteAddr
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	srv.scss[remote] = scs

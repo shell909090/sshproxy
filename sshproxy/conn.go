@@ -27,31 +27,6 @@ type ConnInfo struct {
 	Starttime time.Time
 }
 
-func (srv *Server) createSshConnServer(username, account, host string) (scs SshConnServer, err error) {
-	ci := &ConnInfo{
-		srv:      srv,
-		Username: username,
-		Account:  account,
-		Host:     host,
-		Perms:    make(map[string]int, 0),
-	}
-
-	err = ci.loadAccount()
-	if err != nil {
-		return
-	}
-	if len(ci.Perms) == 0 {
-		return nil, ErrNoPerms
-	}
-
-	err = ci.insertRecord()
-	if err != nil {
-		return
-	}
-
-	return ci, nil
-}
-
 func (ci *ConnInfo) loadAccount() (err error) {
 	v := &url.Values{}
 	v.Add("username", ci.Username)
@@ -66,7 +41,7 @@ func (ci *ConnInfo) loadAccount() (err error) {
 	}
 	rslt := &AccountRsltProxy{}
 
-	err = ci.srv.GetJson("/h/query", false, v, rslt)
+	err = ci.srv.GetJson("/l/h", false, v, rslt)
 	if err != nil {
 		return
 	}
@@ -80,6 +55,11 @@ func (ci *ConnInfo) loadAccount() (err error) {
 	log.Info("query perms: %s / %s@%s => %v.", ci.Username, ci.Account, ci.Host, rslt.Perms)
 	for _, p := range rslt.Perms {
 		ci.Perms[p] = 1
+	}
+	if len(ci.Perms) == 0 {
+		err = ErrNoPerms
+		log.Error("%s", err.Error())
+		return
 	}
 	return
 }
@@ -105,13 +85,14 @@ func (ci *ConnInfo) insertRecord() (err error) {
 	}
 	rslt := &RecordRslt{}
 
-	err = ci.srv.GetJson("/rec/add", true, v, rslt)
+	err = ci.srv.GetJson("/l/rec", true, v, rslt)
 	if err != nil {
 		return
 	}
 	ci.RecordId = rslt.Recordid
 	ci.Starttime, err = time.Parse("2006-01-02T15:04:05", rslt.Starttime)
 	if err != nil {
+		log.Error("%s", err.Error())
 		return
 	}
 	return
@@ -245,5 +226,5 @@ func (ci *ConnInfo) Serve(srvConn *ssh.ServerConn, srvChans <-chan ssh.NewChanne
 func (ci *ConnInfo) updateEndtime() (err error) {
 	v := &url.Values{}
 	v.Add("recordid", fmt.Sprintf("%d", ci.RecordId))
-	return ci.srv.GetJson("/rec/end", true, v, nil)
+	return ci.srv.GetJson("/l/end", true, v, nil)
 }
