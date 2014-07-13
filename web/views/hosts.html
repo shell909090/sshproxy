@@ -25,7 +25,8 @@
         <thead>
 	  <tr>
 	    <td>host</td><td>accounts</td><td>hostname</td>
-	    <td>port</td><td>proxy</td><td>hostkey</td><td>actions</td>
+	    <td>port</td><td>proxy</td>
+	    <td>hostkey</td><td>actions</td>
 	  </tr>
 	</thead>
 	<tbody>
@@ -39,15 +40,13 @@
 	    <td><a href="/acct/{{host.id}}">{{len(host.accounts)}}</a></td>
 	    <td>{{host.hostname}}</td>
 	    <td>{{host.port}}</td>
-	    % if host.proxy:
 	    <td>
+	    % if host.proxy:
 	      <a href="/h/acct/{{host.proxy.id}}/edit">
 		{{'%s@%s' % (host.proxy.account, host.proxy.host.host)}}
 	      </a>
-	    </td>
-	    % else:
-	    <td></td>
 	    % end
+	    </td>
 	    % if 'admin' in session['perms']:
 	    <td><a href="/h/{{host.id}}/renew">{{'yes' if host.hostkeys else 'no'}}</a></td>
 	    % else:

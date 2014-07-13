@@ -217,3 +217,35 @@ def _remove(session, id):
     sess.delete(acct)
     sess.commit()
     return bottle.redirect('/acct/%d' % int(acct.hostid))
+
+@route('/acct/<id:int>/grps')
+@utils.chklogin('admin')
+def _associated(session, id):
+    acct = sess.query(Accounts).filter_by(id=id).scalar()
+    if not acct:
+        return 'account not exist.'
+    acctgrps = set([group.id for group in acct.groups])
+
+    if 'selected' not in session:
+        session['selected'] = acctgrps
+        return bottle.redirect('/grp/select?next=%s' % request.path)
+    grps = set(session.pop('selected'))
+
+    for id in acctgrps - grps:
+        group = sess.query(Groups).filter_by(id=id).scalar()
+        if not group:
+            sess.rollback()
+            return 'some group dont exist.'
+        acct.groups.remove(group)
+
+    for id in grps - acctgrps:
+        group = sess.query(Groups).filter_by(id=id).scalar()
+        if not group:
+            sess.rollback()
+            return 'some group dont exist.'
+        acct.groups.append(group)
+
+    utils.log(logger, 'associated groups to acct %s@%s(%d): %s' % (
+        acct.account, acct.host.host, acct.id, ','.join(grps)))
+    sess.commit()
+    return bottle.redirect('/acct/%d' % int(acct.id))

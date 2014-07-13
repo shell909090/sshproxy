@@ -24,7 +24,7 @@ def _list(session):
 def _select(session):
     groups = sess.query(Groups).order_by(Groups.id)
     return utils.paged_template(
-        'grp.html', _groups=groups, selected=set(session.pop('selected')))
+        'grp_sel.html', _groups=groups, selected=set(session.pop('selected')))
 
 @route('/grp/select', method='POST')
 @utils.chklogin('admin')

@@ -14,73 +14,54 @@
     <div class="container">
       % from bottle import request
       % session = request.environ.get('beaker.session')
-      % if not defined('selected'):
       <a href="/grp/add">add</a>
       <form>
 	<input name="q" type="text"/>
 	<button class="btn" type="submit">query</button>
       </form>
-      % end
-      % if defined('selected'):
-      <form method="POST">
-	% end
-	<table class="table table-striped table-condensed">
-          <thead>
-	    <tr>
-	      % if defined('selected'):
-	      <td>select</td>
+      <table class="table table-striped table-condensed">
+        <thead>
+	  <tr>
+	    <td>name</td><td>users</td><td>accounts</td>
+	    <td>parent</td><td>perms</td>
+	    <td>actions</td>
+	  </tr>
+	</thead>
+	<tbody>
+	  % for group in groups:
+	  <tr>
+	    <td><a href="/grp/{{group.id}}/edit">{{group.name}}</a></td>
+	    <td>
+	      % for user in group.users:
+	      <a href="/usr/{{user.username}}/edit">
+		{{user.username}}
+	      </a>
 	      % end
-	      <td>name</td><td>users</td><td>accounts</td>
-	      <td>parent</td><td>perms</td>
-	      % if not defined('selected'):
-	      <td>actions</td>
+	      [<a href="/grp/{{group.id}}/usrs">edit</a>]
+	    </td>
+	    <td>
+	      % for account in group.accounts:
+	      <a href="/acct/{{account.id}}/edit">
+		{{account.account}}@{{account.host.hostname}}:{{account.host.port}}
+	      </a>
 	      % end
-	    </tr>
-	  </thead>
-	  <tbody>
-	    % for group in groups:
-	    <tr>
-	      % if defined('selected'):
-	      <td><input type="checkbox" name="groups" {{'checked="yes"' if group.id in selected else ''}} value="{{group.id}}"/></td>
+	      [<a href="/grp/{{group.id}}/accts">edit</a>]
+	    </td>
+	    <td>
+	      % for gg in group.parents:
+	      {{gg.parent.name}}
 	      % end
-	      <td><a href="/grp/{{group.id}}/edit">{{group.name}}</a></td>
-	      <td>
-		% for user in group.users:
-		<a href="/usr/{{user.username}}/edit">
-		  {{user.username}}
-		</a>
-		% end
-		[<a href="/grp/{{group.id}}/usrs">edit</a>]
-	      </td>
-	      <td>
-		% for account in group.accounts:
-		<a href="/acct/{{account.id}}/edit">
-		  {{account.account}}@{{account.host.hostname}}:{{account.host.port}}
-		</a>
-		% end
-		[<a href="/grp/{{group.id}}/accts">edit</a>]
-	      </td>
-	      <td>
-		% for gg in group.parents:
-		{{gg.parent.name}}
-		% end
-		[<a href="/grp/{{group.id}}/grp">edit</a>]
-	      </td>
-	      <td>{{group.perms}}</td>
-	      % if not defined('selected'):
-	      <td>
-		<a href="/grp/{{group.id}}/rem">del</a>
-	      </td>
-	      % end
-	    </tr>
-	    % end
-	  </tbody>
-	</table>
-	% include("page.html", page=page, pagemax=pagemax)
-	% if defined('selected'):
-        <button class="btn btn-primary" type="submit">Submit</button>
-      </form>
-      % end
+	      [<a href="/grp/{{group.id}}/grp">edit</a>]
+	    </td>
+	    <td>{{group.perms}}</td>
+	    <td>
+	      <a href="/grp/{{group.id}}/rem">del</a>
+	    </td>
+	  </tr>
+	  % end
+	</tbody>
+      </table>
+      % include("page.html", page=page, pagemax=pagemax)
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>

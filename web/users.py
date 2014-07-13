@@ -178,6 +178,38 @@ def _remove(session, username):
     sess.commit()
     return bottle.redirect('/usr/')
 
+@route('/usr/<username>/grps')
+@utils.chklogin('admin')
+def _associated(session, username):
+    user = sess.query(Users).filter_by(username=username).scalar()
+    if not user:
+        return 'user not exist.'
+    usrgrps = set([group.id for group in user.groups])
+
+    if 'selected' not in session:
+        session['selected'] = usrgrps
+        return bottle.redirect('/grp/select?next=%s' % request.path)
+    grps = set(session.pop('selected'))
+
+    for id in usrgrps - grps:
+        group = sess.query(Groups).filter_by(id=id).scalar()
+        if not group:
+            sess.rollback()
+            return 'some group dont exist.'
+        user.groups.remove(group)
+
+    for id in grps - usrgrps:
+        group = sess.query(Groups).filter_by(id=id).scalar()
+        if not group:
+            sess.rollback()
+            return 'some group dont exist.'
+        user.groups.append(group)
+
+    utils.log(logger, 'associated groups to user %s: %s' % (
+        username, ','.join(grps)))
+    sess.commit()
+    return bottle.redirect('/usr/')
+
 @route('/pubk/')
 @utils.chklogin()
 def _list(session):

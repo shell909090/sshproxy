@@ -39,10 +39,12 @@ func (lr *LogReader) Close() (err error) {
 
 func (lr *LogReader) Write(p []byte) (n int, err error) {
 	for _, c := range p {
-		i := bytes.Index([]byte("0123456789"), c)
-		log.Debug("%d", i)
-		n += 1
+		i := bytes.Index([]byte("0123456789"), []byte{c})
+		if i != -1 {
+			log.Debug("%d", i)
+		}
 	}
+	n = len(p)
 	return
 }
 

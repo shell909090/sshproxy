@@ -20,7 +20,8 @@
       <table class="table table-striped table-condensed">
         <thead>
 	  <tr>
-	    <td>account</td><td>key</td><td>actions</td>
+	    <td>account</td><td>key</td>
+	    <td>groups</td><td>actions</td>
 	  </tr>
 	</thead>
 	<tbody>
@@ -28,6 +29,12 @@
 	  <tr>
 	    <td>{{acct.account}}</td>
 	    <td>{{'yes' if acct.key else 'no'}}</td>
+	    <td>
+	      % for group in acct.groups:
+	        {{group.name}}
+	      % end
+	      [<a href="/acct/{{acct.id}}/grps">edit</a>]
+	    </td>
 	    <td>
 	      % if 'admin' in session['perms']:
 	      <a href="/acct/{{acct.id}}/edit">edit</a>

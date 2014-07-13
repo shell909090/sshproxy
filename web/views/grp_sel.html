@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
-    <title>user managment</title>
+    <title>group managment</title>
     <meta charset="utf-8" />
     <meta name="author" content="shell">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,45 +13,44 @@
     % include("nav.html")
     <div class="container">
       % from bottle import request
-      <a href="/usr/add">add</a>
-      <form>
-	<input name="q" type="text"/>
-	<button class="btn" type="submit">query</button>
-      </form>
+      % session = request.environ.get('beaker.session')
+      <form method="POST">
 	<table class="table table-striped table-condensed">
           <thead>
 	    <tr>
-	      % if defined('selected'):
 	      <td>select</td>
-	      % end
-	      <td>name</td><td>email</td><td>pubkeys</td>
-	      <td>perms</td><td>groups</td>
-	      % if not defined('selected'):
-	      <td>actions</td>
-	      % end
+	      <td>name</td><td>users</td><td>accounts</td>
+	      <td>parent</td><td>perms</td>
 	    </tr>
 	  </thead>
 	  <tbody>
-	    % for user in users:
+	    % for group in groups:
 	    <tr>
-	      <td><a href="/usr/{{user.username}}/edit">{{user.username}}</a></td>
-	      <td>{{user.email or ''}}</td>
-	      <td>{{len(user.pubkeys)}}</td>
-	      <td>{{user.perms}}</td>
+	      <td><input type="checkbox" name="groups" {{'checked="yes"' if group.id in selected else ''}} value="{{group.id}}"/></td>
+	      <td>{{group.name}}</td>
 	      <td>
-	      % for group in user.groups:
-	        {{group.name}}
-	      % end
-	      [<a href="/usr/{{user.username}}/grps">edit</a>]
+		% for user in group.users:
+		  {{user.username}}
+		% end
 	      </td>
 	      <td>
-		<a href="/usr/{{user.username}}/rem">del</a>
+		% for account in group.accounts:
+		  {{account.account}}@{{account.host.hostname}}:{{account.host.port}}
+		% end
 	      </td>
+	      <td>
+		% for gg in group.parents:
+		{{gg.parent.name}}
+		% end
+	      </td>
+	      <td>{{group.perms}}</td>
 	    </tr>
 	    % end
 	  </tbody>
 	</table>
 	% include("page.html", page=page, pagemax=pagemax)
+        <button class="btn btn-primary" type="submit">Submit</button>
+      </form>
     </div>
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js" charset="utf-8"></script>
     <script src="/static/js/bootstrap.min.js"></script>
