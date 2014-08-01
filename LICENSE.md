@@ -300,7 +300,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 # go.crypto/ssh
 
-This product includes software developed by the Google.
+This product includes software developed by the Google under 3-Clause BSD.
+
+You can get it's source code from [google code](https://code.google.com/p/go/source/checkout?repo=crypto).
 
     Copyright (c) 2009 The Go Authors. All rights reserved.
      
