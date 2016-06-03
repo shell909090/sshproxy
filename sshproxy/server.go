@@ -2,7 +2,6 @@ package sshproxy
 
 import (
 	"bytes"
-	"code.google.com/p/go.crypto/ssh"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type WebConfig struct {

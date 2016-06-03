@@ -1,10 +1,11 @@
 package sshproxy
 
 import (
-	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"net/url"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type ChanInfo struct {

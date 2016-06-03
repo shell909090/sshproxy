@@ -2,13 +2,14 @@ package sshproxy
 
 import (
 	"bytes"
-	"code.google.com/p/go.crypto/ssh"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type LogReader struct {

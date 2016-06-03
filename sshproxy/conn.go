@@ -1,12 +1,13 @@
 package sshproxy
 
 import (
-	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"net"
 	"net/url"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type ConnInfo struct {

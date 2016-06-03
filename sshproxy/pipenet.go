@@ -2,12 +2,13 @@ package sshproxy
 
 import (
 	"bytes"
-	"code.google.com/p/go.crypto/ssh"
 	"fmt"
 	"io"
 	"net"
 	"text/template"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type Waiter interface {
